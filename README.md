@@ -42,6 +42,23 @@ sudo apt-get update
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
+添加 Docker 的 GPG 密钥：
+```bash
+curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+```
+
+更换为清华大学镜像源：
+```bash
+sudo nano /etc/apt/sources.list.d/docker.list
+```
+替换为以下内容：
+deb [arch=amd64] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu focal stable
+保存并关闭文件。
+```bash
+sudo apt-get update
+```
+
+
 After that, finish the post-installation steps: https://docs.docker.com/engine/install/linux-postinstall/
 That is, run:
 
