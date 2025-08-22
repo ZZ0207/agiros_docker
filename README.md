@@ -59,7 +59,22 @@ deb [arch=amd64] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu foc
 ```bash
 sudo apt-get update
 ```
+1.3 安装失败：
+方案一：使用国内镜像源安装
+1. 使用阿里云镜像安装 Docker
+bash
 
+# 下载安装脚本
+curl -fsSL https://get.docker.com -o get-docker.sh
+
+# 使用阿里云镜像安装
+sudo sh get-docker.sh --mirror Aliyun
+或者使用中科大镜像
+bash
+
+sudo sh get-docker.sh --mirror AzureChinaCloud
+
+2.docker 设置
 
 After that, finish the post-installation steps: https://docs.docker.com/engine/install/linux-postinstall/
 That is, run:
