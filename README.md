@@ -85,6 +85,11 @@ sudo usermod -aG docker $USER
 newgrp docker
 rm -rf ~/.docker  # Remove the old configuration
 
+2. 设置 Docker 开机自启
+
+sudo systemctl enable docker
+sudo systemctl start docker
+
 # Reboot your computer
 sudo reboot
 
