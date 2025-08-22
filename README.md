@@ -85,13 +85,52 @@ sudo usermod -aG docker $USER
 newgrp docker
 rm -rf ~/.docker  # Remove the old configuration
 
-2. 设置 Docker 开机自启
+3. 设置 Docker 开机自启
 
 sudo systemctl enable docker
 sudo systemctl start docker
+4. 设置国内镜像源:
+sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+"registry-mirrors": [
+"https://docker.registry.cyou",
+"https://docker-cf.registry.cyou",
+"https://dockercf.jsdelivr.fyi",
+"https://docker.jsdelivr.fyi",
+"https://dockertest.jsdelivr.fyi",
+"https://mirror.aliyuncs.com",
+"https://dockerproxy.com",
+"https://mirror.baidubce.com",
+"https://docker.m.daocloud.io",
+"https://docker.nju.edu.cn",
+"https://docker.mirrors.sjtug.sjtu.edu.cn",
+"https://docker.mirrors.ustc.edu.cn",
+"https://mirror.iscas.ac.cn",
+"https://docker.rainbond.cc",
+"https://docker.mirrors.ustc.edu.cn",
+"https://dockerpull.com",
+"https://dockerproxy.cn",
+"https://docker.m.daocloud.io"
+],
+"runtimes": {
+"nvidia": {
+"args": [],
+"path": "nvidia-container-runtime"
+}
+}
+}
+EOF
 
-# Reboot your computer
-sudo reboot
+重启 Docker 服务使配置生效
+# 重新加载配置
+sudo systemctl daemon-reload
+
+# 重启 Docker 服务
+sudo systemctl restart docker
+
+# 检查配置是否生效
+docker info
+
 
 # Run to see if you can run docker without sudo:
 docker run hello-world
