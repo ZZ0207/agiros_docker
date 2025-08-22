@@ -42,6 +42,8 @@ sudo apt-get update
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
+1.2 如果访问https://download.docker.com下载失败，替换国内源
+
 添加 Docker 的 GPG 密钥：
 ```bash
 curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
