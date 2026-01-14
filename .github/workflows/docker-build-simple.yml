@@ -1,0 +1,89 @@
+name: Build Docker Images (Simple)
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - dev
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+      - main
+    workflow_dispatch:
+
+env:
+  REGISTRY: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com
+  AGIROS_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker
+  ROS2_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-openeuler
+
+jobs:
+  build-agiros-openeuler:
+    name: Build AGIROS openEuler Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./agiros/openeuler/Dockerfile-openeuler-loong
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.AGIROS_IMAGE }}:latest
+            ${{ env.AGIROS_IMAGE }}:${{ github.sha }}
+            ${{ env.AGIROS_IMAGE }}:${{ github.ref_name }}
+          cache-from: type=registry,ref=${{ env.AGIROS_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.AGIROS_IMAGE }}:buildcache,mode=max
+
+  build-ros2-openeuler:
+    name: Build ROS2 Humble openEuler Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./ros2/openeuler/Dockerfile-openeuler-humble
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.ROS2_IMAGE }}:latest
+            ${{ env.ROS2_IMAGE }}:${{ github.sha }}
+            ${{ env.ROS2_IMAGE }}:${{ github.ref_name }}
+          cache-from: type=registry,ref=${{ env.ROS2_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.ROS2_IMAGE }}:buildcache,mode=max

@@ -189,9 +189,32 @@ This script will:
 - Restart Docker service
 - Recreate the buildx builder
 
-### Gitee CI/CD
+### CI/CD
 
-This repository includes Gitee Go pipeline configuration for automatic Docker image builds:
+This repository includes CI/CD pipeline configurations for automatic Docker image builds:
+
+#### GitHub Actions
+
+- **Location**: `.github/workflows/docker-build.yml` (full version with metadata) or `.github/workflows/docker-build-simple.yml` (simplified version)
+- **Triggers**: Push to `master`, `main`, `dev` branches, tags starting with `v*`, or pull requests
+- **Images Built**:
+  - AGIROS openEuler image (multi-arch: amd64/arm64)
+  - ROS2 Humble openEuler image (multi-arch: amd64/arm64)
+
+**Setup Instructions**:
+1. Go to your GitHub repository → Settings → Secrets and variables → Actions
+2. Add repository secrets:
+   - `DOCKER_USERNAME`: Your container registry username
+   - `DOCKER_PASSWORD`: Your container registry password
+3. The workflow will automatically build and push images on push/PR events
+
+**Features**:
+- Automatic multi-arch builds (amd64/arm64)
+- Build cache for faster subsequent builds
+- Automatic tagging with branch name, commit SHA, and semantic versioning
+- PR builds (without push) for testing
+
+#### Gitee Go
 
 - **Location**: `.gitee/pipelines/docker-build.yml`
 - **Triggers**: Push to `master`, `main`, `dev` branches or tags starting with `v*`
@@ -202,7 +225,7 @@ This repository includes Gitee Go pipeline configuration for automatic Docker im
 **Setup Instructions**:
 1. Go to your Gitee repository → Settings → Gitee Go
 2. Enable Gitee Go and configure the pipeline
-3. Add secrets:
+3. Add environment variables:
    - `DOCKER_USERNAME`: Your container registry username
    - `DOCKER_PASSWORD`: Your container registry password
 4. The pipeline will automatically build and push images on push/PR events
