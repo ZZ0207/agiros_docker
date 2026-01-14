@@ -18,7 +18,6 @@ SHELL ["/bin/bash", "-c"]
 
 ARG ROS_DISTRO=loong
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
-ARG AGIROS_REPOS_URL=https://raw.githubusercontent.com/agiros/agiros/${ROS_DISTRO}/agiros.repos
 ARG AGIROS_INSTALL_URL=http://1.94.193.239/yumrepo/agiros/openeuler2403lts/2512/install.sh
 
 # docker buildx will set this automatically (amd64/arm64)
@@ -35,6 +34,9 @@ ENV LANG=C.UTF-8 \
 WORKDIR /root
 
 # Copy repo `src/` into the image user's $HOME/src (root -> /root/src)
+# Note: Submodules (unitree_sdk2, unitree_ros2) should be initialized before building.
+# In CI/CD (GitHub Actions/Gitee Go), submodules are auto-fetched via checkout action.
+# For local builds, run: git submodule update --init --recursive
 RUN set -euxo pipefail; \
     mkdir -p /root/src
 COPY src/ /root/src/
@@ -104,13 +106,20 @@ RUN set -euxo pipefail; \
 
 
 # ===== GStreamer =====
-RUN dnf -y install \
-    gstreamer1-plugins-base-devel \
-    gstreamer1-plugins-good-devel \
-    && dnf clean all; \
+# Install GStreamer and PyGObject dependencies
+RUN set -euxo pipefail; \
+    dnf -y install \
+      gstreamer1-devel \
+      gstreamer1-plugins-base-devel \
+      gstreamer1-plugins-good \
+      cairo-devel \
+      gobject-introspection-devel \
+      python3-gobject \
+      meson \
+      && dnf clean all; \
     rm -rf /var/cache/dnf
 # Install PyGObject using pip
-RUN python3 -m pip install PyGObject
+RUN python3 -m pip install --no-cache-dir PyGObject
 # Run test file to check if PyGObject is installed correctly
 WORKDIR /root/src
 RUN python3 /root/src/tests/test_gi.py

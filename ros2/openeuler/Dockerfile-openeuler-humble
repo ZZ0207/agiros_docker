@@ -85,6 +85,8 @@ RUN set -euxo pipefail; \
     rosdep init || true; \
     rosdep update || true
 
+
+    
 # Fetch ROS2 sources
 RUN set -euxo pipefail; \
     mkdir -p /tmp/ros2_ws/src; \

@@ -163,8 +163,26 @@ There are two ways to get the Docker image:
 Build the Docker image from the Dockerfile:
 
 ```bash
+# The build script automatically initializes git submodules
 bash docker_build.sh
+
+# Or with options:
+bash docker_build.sh --push                    # Build and push to registry
+bash docker_build.sh --no-retry                # Disable retry on network errors
+bash docker_build.sh --platform linux/amd64   # Build for single platform
+bash docker_build.sh --help                    # Show all options
 ```
+
+**Script Features**:
+- ✅ **Automatic submodule initialization**: Automatically runs `git submodule update --init --recursive`
+- ✅ **Retry mechanism**: Automatically retries on network errors (3 attempts with exponential backoff)
+- ✅ **Buildx management**: Automatically sets up and manages Docker Buildx builder
+- ✅ **Multi-arch support**: Builds for both amd64 and arm64 by default
+- ✅ **Push support**: Use `--push` flag to push to registry after build
+
+**Note**: This repository uses git submodules for `unitree_sdk2` and `unitree_ros2`. 
+- **CI/CD builds** (GitHub Actions/Gitee Go) automatically fetch submodules via `submodules: recursive` in checkout action.
+- **Local builds**: The `docker_build.sh` script automatically initializes submodules before building.
 
 Pull the Docker image from Docker Hub: TODO.
 

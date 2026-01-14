@@ -3,6 +3,8 @@ FROM osrf/ros:humble-desktop
 
 # Set an environment variable for non-interactive installs
 ENV DEBIAN_FRONTEND=noninteractive
+ARG ROS_DISTRO=humble
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 
 
 # Update package lists and install additional packages (e.g., pip and other tools)
@@ -15,24 +17,31 @@ RUN apt-get update && apt-get install -y \
     ros-humble-rosidl-generator-dds-idl \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. 添加 agiros apt 源
-COPY ./add-agiros-apt-source.sh /tmp/add-agiros-apt-source.sh
-RUN chmod +x /tmp/add-agiros-apt-source.sh && /tmp/add-agiros-apt-source.sh && rm /tmp/add-agiros-apt-source.sh
-
-# 3. 系统升级和 ROS/AGiROS 安装
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
-    python3-colcon-common-extensions python3-colcon-mixin python3-vcstool \
-    agiros-loong-ros-base agiros-loong-control-msgs agiros-loong-ros2-control \
-    agiros-loong-moveit agiros-loong-ros-ign agiros-loong-joint-state-publisher-gui \
-    agiros-loong-kinematics-interface-kdl agiros-loong-rqt-joint-trajectory-controller \
-    agiros-loong-rqt agiros-loong-rviz2 agiros-loong-rosbag2 ignition-fortress && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
 # Copy your entire repository into the container
-COPY . /app
+COPY . /src
 
+
+# Install RViz2 and Gazebo
+RUN apt-get install --no-install-recommends -yqqq \
+    ros-$ROS_DISTRO-rviz2 \
+    ros-$ROS_DISTRO-ros-gz
+
+# Optional
+#--------------
+# Add additional dependencies here as a separate step
+# Don't modify above steps, as it will trigger a rebuild
+
+# Non Python/ROS Dependencies
+# RUN apt-get install --no-install-recommends -yqqq \
+#     vim
+
+# Python Dependencies
+# RUN apt-get install --no-install-recommends -yqqq \
+#     python-pip
+
+# ROS Dependencies
+# RUN apt-get install --no-install-recommends -yqqq \
+#     ros-$ROS_DISTRO-xacro
 
 # ===== GStreamer =====
 RUN apt-get update && apt-get install -y \
@@ -49,8 +58,8 @@ RUN apt-get update && apt-get install -y \
 # Install PyGObject using pip
 RUN pip3 install PyGObject
 # Run test file to check if PyGObject is installed correctly
-WORKDIR /app
-RUN python3 tests/test_gi.py
+WORKDIR /src
+RUN python3 src/tests/test_gi.py
 # ===== GStreamer =====
 
 
@@ -58,7 +67,7 @@ RUN python3 tests/test_gi.py
 # Build the Unitree SDK:
 # Change to the unitree_sdk2 folder, make install.sh executable and run it,
 # then create a build directory, run cmake and make.
-WORKDIR /app/unitree_sdk2
+WORKDIR /src/unitree_sdk2
 RUN mkdir build && \
     cd build && \
     cmake .. && \
@@ -69,26 +78,26 @@ RUN mkdir build && \
 # ===== Installing unitree_ros2 =====
 # Following https://github.com/unitreerobotics/unitree_ros2
 # To get unitree_ros2 installed.
-WORKDIR /app/unitree_ros2/cyclonedds_ws/src
+WORKDIR /src/unitree_ros2/cyclonedds_ws/src
 RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
     git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
     cd .. && \
     colcon build --packages-select cyclonedds
 # Now, source the ROS2 environment and build the rest of the packages,
 # skipping cyclone‑dds (which has already been built)
-WORKDIR /app/unitree_ros2/cyclonedds_ws
+WORKDIR /src/unitree_ros2/cyclonedds_ws
 RUN bash -c "source /opt/ros/humble/setup.bash && \
-             pwd && \
-             colcon build"
+            pwd && \
+            colcon build"
 # Double check whether the build was successful
-RUN ls -l /app/unitree_ros2/cyclonedds_ws
+RUN ls -l /src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====
 
 
 # Create a dedicated directory for your application code
-WORKDIR /app
+WORKDIR /src
 
-# Copy your docker_internal_setup.sh script into /app
+# Copy your docker_internal_setup.sh script into /src
 COPY docker_internal_setup.sh .
 
 # Make sure that pip points to pip3
@@ -99,6 +108,14 @@ RUN rm -f /usr/bin/python && ln -sf /usr/bin/python3 /usr/bin/python
 
 # Ensure that docker_internal_setup.sh is executable
 RUN chmod +x docker_internal_setup.sh
+
+ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
+    ROS_DISTRO=${ROS_DISTRO} \
+    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
+    AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
+    PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}
 
 # Set the entrypoint to start your application
 ENTRYPOINT ["./docker_internal_setup.sh"]

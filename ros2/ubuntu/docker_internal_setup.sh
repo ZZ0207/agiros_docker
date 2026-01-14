@@ -2,7 +2,7 @@
 set -e
 
 # Source the ROS environment
-source /opt/ros/foxy/setup.bash
+source /opt/ros/${ROS_DISTRO}/setup.bash
 
 # Print an initialization message
 echo "Docker container initialized successfully. ROS2 environment is now set up."
