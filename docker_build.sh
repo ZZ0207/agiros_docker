@@ -1,6 +1,29 @@
 #!/bin/bash
 # docker build -t unitree-go2-docker:latest . --no-cache --progress=plain
 
+# Ensure buildx builder exists and works
+if ! docker buildx inspect multiarch &>/dev/null; then
+    echo "Creating buildx builder 'multiarch'..."
+    docker buildx create --name multiarch --driver docker-container --use
+    docker buildx inspect --bootstrap || {
+        echo "Error: Failed to create buildx builder. You may need to fix Docker daemon configuration."
+        echo "Run: sudo bash fix_docker_runtime.sh"
+        exit 1
+    }
+else
+    docker buildx use multiarch
+    # Try to bootstrap to check if it works
+    if ! docker buildx inspect --bootstrap &>/dev/null; then
+        echo "Warning: Builder exists but failed to start. Recreating..."
+        docker buildx rm multiarch
+        docker buildx create --name multiarch --driver docker-container --use
+        docker buildx inspect --bootstrap || {
+            echo "Error: Failed to recreate buildx builder. You may need to fix Docker daemon configuration."
+            echo "Run: sudo bash fix_docker_runtime.sh"
+            exit 1
+        }
+    fi
+fi
 
 docker buildx build --platform linux/amd64,linux/arm64 -t agiros-loong-openeuler:12.18 -f agiros/openeuler/Dockerfile-openeuler-loong .
 # docker buildx build --platform linux/amd64 --load -t agiros-loong-openeuler:12.18 -f agiros/openeuler/Dockerfile-openeuler-loong .

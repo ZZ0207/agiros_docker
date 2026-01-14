@@ -1,6 +1,8 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 #
 # openEuler + agiros loong  for multi-arch (amd64/arm64).
+# Note: If you encounter network errors, you can remove the syntax line above
+# and use standard Dockerfile syntax instead.
 # Build with:
 #   docker buildx build --platform linux/amd64,linux/arm64 -t <name>:loong-openeuler -f agiros/openeuler/Dockerfile-openeuler-loong .
 #
@@ -99,6 +101,55 @@ RUN set -euxo pipefail; \
     sed -i 's#</dev/tty#</dev/stdin#g' install.sh; \
     printf "2\n" | bash ./install.sh; \
     rm install.sh
+
+
+# ===== GStreamer =====
+RUN dnf -y install \
+    gstreamer1-plugins-base-devel \
+    gstreamer1-plugins-good-devel \
+    && dnf clean all; \
+    rm -rf /var/cache/dnf
+# Install PyGObject using pip
+RUN python3 -m pip install PyGObject
+# Run test file to check if PyGObject is installed correctly
+WORKDIR /root/src
+RUN python3 /root/src/tests/test_gi.py
+# ===== GStreamer =====
+
+
+# ===== Installing unitree_sdk2 =====
+# Build the Unitree SDK:
+# Change to the unitree_sdk2 folder, make install.sh executable and run it,
+# then create a build directory, run cmake and make.
+WORKDIR /root/src/unitree_sdk2
+RUN mkdir build && \
+    cd build && \
+    cmake .. && \
+    sudo make install
+# ===== Installing unitree_sdk2 =====
+
+
+# ===== Installing unitree_ros2 =====
+# Following https://github.com/unitreerobotics/unitree_ros2
+# To get unitree_ros2 installed.
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
+RUN git clone https://github.com/ros2/rmw_cyclonedds -b ${ROS_DISTRO} && \
+    git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
+    cd .. && \
+    colcon build --packages-select cyclonedds
+
+# Now, source the ROS2 environment and build the rest of the packages,
+# skipping cyclone‑dds (which has already been built)
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws
+#修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+RUN cp agiros/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh && chmod +x /root/src/unitree_ros2/setup.sh
+RUN bash -c "source /opt/agiros/${ROS_DISTRO}/setup.bash && \
+             pwd && \
+             colcon build"
+# Double check whether the build was successful
+RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
+# ===== Installing unitree_ros2 =====
+
 
 # Default ROS environment for interactive shells
 RUN set -euxo pipefail; \

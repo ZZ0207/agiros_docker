@@ -168,6 +168,45 @@ bash docker_build.sh
 
 Pull the Docker image from Docker Hub: TODO.
 
+### Troubleshooting
+
+#### Buildx GPU Runtime Error
+
+If you encounter the error:
+```
+ERROR: Error response from daemon: could not select device driver "" with capabilities: [[gpu]]
+```
+
+This happens when Docker daemon is configured to use `nvidia` as default runtime but `nvidia-container-runtime` is not installed. To fix:
+
+```bash
+sudo bash fix_docker_runtime.sh
+```
+
+This script will:
+- Backup your current Docker daemon configuration
+- Change default runtime from `nvidia` to `runc`
+- Restart Docker service
+- Recreate the buildx builder
+
+### Gitee CI/CD
+
+This repository includes Gitee Go pipeline configuration for automatic Docker image builds:
+
+- **Location**: `.gitee/pipelines/docker-build.yml`
+- **Triggers**: Push to `master`, `main`, `dev` branches or tags starting with `v*`
+- **Images Built**:
+  - AGIROS openEuler image (multi-arch: amd64/arm64)
+  - ROS2 Humble openEuler image (multi-arch: amd64/arm64)
+
+**Setup Instructions**:
+1. Go to your Gitee repository → Settings → Gitee Go
+2. Enable Gitee Go and configure the pipeline
+3. Add secrets:
+   - `DOCKER_USERNAME`: Your container registry username
+   - `DOCKER_PASSWORD`: Your container registry password
+4. The pipeline will automatically build and push images on push/PR events
+
 ### openEuler + ROS 2 Humble (multi-arch)
 
 This repo also includes an openEuler-based ROS 2 Humble Dockerfile (built from source):

@@ -1,0 +1,60 @@
+# Gitee Go Pipeline Configuration
+# 自动构建 Docker 镜像
+
+version: '1.0'
+name: docker-build
+displayName: Build Docker Images
+
+# 触发条件
+trigger:
+  push:
+    branches:
+      - master
+      - main
+      - dev
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+      - main
+
+# 构建任务
+stages:
+  - stage:
+      name: build-agiros-openeuler
+      displayName: Build AGIROS openEuler Image
+      steps:
+        - step: build@docker
+          name: build_agiros
+          displayName: 构建 AGIROS openEuler 镜像
+          repository: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker
+          username: ${DOCKER_USERNAME}
+          password: ${DOCKER_PASSWORD}
+          tag: |
+            latest
+            ${GITEE_PIPELINE_BUILD_NUMBER}
+            ${GITEE_COMMIT_SHORT_SHA}
+          dockerfile: ./agiros/openeuler/Dockerfile-openeuler-loong
+          context: .
+          platforms: linux/amd64,linux/arm64
+          isCache: true
+
+  - stage:
+      name: build-ros2-openeuler
+      displayName: Build ROS2 Humble openEuler Image
+      steps:
+        - step: build@docker
+          name: build_ros2
+          displayName: 构建 ROS2 Humble openEuler 镜像
+          repository: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-openeuler
+          username: ${DOCKER_USERNAME}
+          password: ${DOCKER_PASSWORD}
+          tag: |
+            latest
+            ${GITEE_PIPELINE_BUILD_NUMBER}
+            ${GITEE_COMMIT_SHORT_SHA}
+          dockerfile: ./ros2/openeuler/Dockerfile-openeuler-humble
+          context: .
+          platforms: linux/amd64,linux/arm64
+          isCache: true

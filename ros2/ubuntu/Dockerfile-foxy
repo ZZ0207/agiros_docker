@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y \
 # Copy your entire repository into the container
 COPY . /app
 
-
 # ===== GStreamer =====
 RUN apt-get update && apt-get install -y \
     python3 \
