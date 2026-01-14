@@ -43,9 +43,6 @@ RUN apt-get install --no-install-recommends -yqqq \
 #     ros-$ROS_DISTRO-xacro
 
 
-
-
-
 # ===== GStreamer =====
 RUN apt-get update && apt-get install -y \
     python3 \

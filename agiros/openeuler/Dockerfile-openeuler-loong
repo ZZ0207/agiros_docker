@@ -107,17 +107,28 @@ RUN set -euxo pipefail; \
 
 # ===== GStreamer =====
 # Install GStreamer and PyGObject dependencies
+# Note: Must install cairo runtime library before cairo-devel for pkg-config to work
 RUN set -euxo pipefail; \
     dnf -y install \
+      cairo \
+      cairo-devel \
+      cairo-gobject \
+      cairo-gobject-devel \
+      gstreamer1 \
       gstreamer1-devel \
+      gstreamer1-plugins-base \
       gstreamer1-plugins-base-devel \
       gstreamer1-plugins-good \
-      cairo-devel \
+      gobject-introspection \
       gobject-introspection-devel \
       python3-gobject \
+      python3-cairo \
       meson \
+      ninja-build \
       && dnf clean all; \
     rm -rf /var/cache/dnf
+# Verify cairo is found by pkg-config
+RUN pkg-config --exists cairo && echo "✓ cairo found by pkg-config" || (echo "✗ cairo not found" && pkg-config --list-all | grep cairo || true)
 # Install PyGObject using pip
 RUN python3 -m pip install --no-cache-dir PyGObject
 # Run test file to check if PyGObject is installed correctly

@@ -85,39 +85,17 @@ RUN set -euxo pipefail; \
     rosdep init || true; \
     rosdep update || true
 
+#添加openEuler的ros2源
+RUN dnf config-manager --add-repo https://repo.openeuler.org/openEuler-24.03-LTS/everything/x86_64/os/Packages/ros2.repo
 
-    
-# Fetch ROS2 sources
-RUN set -euxo pipefail; \
-    mkdir -p /tmp/ros2_ws/src; \
-    cd /tmp/ros2_ws; \
-    curl -fsSL "${ROS2_REPOS_URL}" -o ros2.repos; \
-    vcs import src < ros2.repos
+#更新软件源并安装ros2 桌面版
+RUN dnf update -y && dnf install -y \
+    ros-$ROS_DISTRO-desktop
 
-# rosdep:
-# - openEuler may not be recognized directly, so we default to a RHEL-like mapping.
-# - If you still hit missing keys/packages, set ROSDEP_ALLOW_FAIL=1 to continue and debug from build logs.
-ARG ROSDEP_OS_OVERRIDE=centos:8
-ARG ROSDEP_ALLOW_FAIL=0
-RUN set -euxo pipefail; \
-    cd /tmp/ros2_ws; \
-    if [[ -n "${ROSDEP_OS_OVERRIDE}" ]]; then export ROSDEP_OS_OVERRIDE="${ROSDEP_OS_OVERRIDE}"; fi; \
-    if [[ "${ROSDEP_ALLOW_FAIL}" == "1" ]]; then \
-      rosdep install --from-paths src --ignore-src -r -y --rosdistro "${ROS_DISTRO}" || true; \
-    else \
-      rosdep install --from-paths src --ignore-src -r -y --rosdistro "${ROS_DISTRO}"; \
-    fi
-
-# Build ROS2
-RUN set -euxo pipefail; \
-    cd /tmp/ros2_ws; \
-    colcon build \
-      --merge-install \
-      --install-base "${ROS_INSTALL_BASE}" \
-      --cmake-args \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_TESTING=OFF; \
-    rm -rf /tmp/ros2_ws
+#安装RViz2和Gazebo
+RUN dnf install -y \
+    ros-$ROS_DISTRO-rviz2 \
+    ros-$ROS_DISTRO-ros-gz
 
 # Default ROS environment for interactive shells
 RUN set -euxo pipefail; \
