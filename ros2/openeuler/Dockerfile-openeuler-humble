@@ -67,12 +67,13 @@ RUN set -euxo pipefail; \
       && dnf clean all; \
     rm -rf /var/cache/dnf
 
-# Python build
+# Python build + ROS tooling (including rosdep)
 RUN set -euxo pipefail; \
     python3 -m pip install --no-cache-dir -U pip setuptools wheel; \
     python3 -m pip install --no-cache-dir -U \
       colcon-common-extensions \
       vcstool \
+      rosdep \
       empy \
       catkin_pkg \
       lark \
@@ -81,7 +82,6 @@ RUN set -euxo pipefail; \
 
 # rosdep best-effort init (may fail on minimal containers if already initialized)
 RUN set -euxo pipefail; \
-    apt-get update && apt-get install -y rosdep && apt-get clean && rm -rf /var/lib/apt/lists/*; \
     rosdep init || true; \
     rosdep update || true
 
