@@ -1,0 +1,115 @@
+# syntax=docker/dockerfile:1
+#
+# openEuler + agiros loong  for multi-arch (amd64/arm64).
+# Build with:
+#   docker buildx build --platform linux/amd64,linux/arm64 -t <name>:loong-openeuler -f agiros/openeuler/Dockerfile-openeuler-loong .
+#
+# Notes:
+# - ROS 2 binaries are not officially released for openEuler, so we build from source.
+# - Dependency resolution via rosdep may not fully match openEuler; this Dockerfile attempts rosdep and continues.
+#
+
+ARG OPENEULER_TAG=24.03-lts
+FROM openeuler/openeuler:${OPENEULER_TAG}
+
+SHELL ["/bin/bash", "-c"]
+
+ARG ROS_DISTRO=loong
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
+ARG AGIROS_REPOS_URL=https://raw.githubusercontent.com/agiros/agiros/${ROS_DISTRO}/agiros.repos
+ARG AGIROS_INSTALL_URL=http://1.94.193.239/yumrepo/agiros/openeuler2403lts/2512/install.sh
+
+# docker buildx will set this automatically (amd64/arm64)
+ARG TARGETARCH
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    TZ=Etc/UTC \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ROS_DISTRO=${ROS_DISTRO} \
+    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
+
+WORKDIR /root
+
+# Copy repo `src/` into the image user's $HOME/src (root -> /root/src)
+RUN set -euxo pipefail; \
+    mkdir -p /root/src
+COPY src/ /root/src/
+
+# Base build tooling + common ROS2 deps (RPM names are "RHEL-like"; some may vary by openEuler release).
+RUN set -euxo pipefail; \
+    dnf -y update; \
+    dnf -y install \
+      bash \
+      ca-certificates \
+      curl \
+      wget \
+      git \
+      which \
+      findutils \
+      tar \
+      gzip \
+      bzip2 \
+      unzip \
+      make \
+      cmake \
+      ninja-build \
+      gcc \
+      gcc-c++ \
+      pkgconf-pkg-config \
+      python3 \
+      python3-pip \
+      python3-devel \
+      python3-numpy \
+      python3-lxml \
+      openssl-devel \
+      libffi-devel \
+      libyaml-devel \
+      libuuid-devel \
+      libxml2-devel \
+      tinyxml2-devel \
+      libcurl-devel \
+      sqlite-devel \
+      yaml-cpp-devel \
+      alsa-lib-devel \
+      libpcap-devel \
+      && dnf clean all; \
+    rm -rf /var/cache/dnf
+
+# Python build
+RUN set -euxo pipefail; \
+    python3 -m pip install --no-cache-dir -U pip setuptools wheel; \
+    python3 -m pip install --no-cache-dir -U \
+      colcon-common-extensions \
+      colcon-mixin \
+      colcon-ros \
+      vcstool \
+      empy \
+      catkin_pkg \
+      lark \
+      pyyaml \
+      pytest
+
+
+# Install agiros
+RUN set -euxo pipefail; \
+    curl -fsSL "${AGIROS_INSTALL_URL}" -o install.sh; \
+    chmod +x install.sh; \
+    sed -i 's#</dev/tty#</dev/stdin#g' install.sh; \
+    printf "2\n" | bash ./install.sh; \
+    rm install.sh
+
+# Default ROS environment for interactive shells
+RUN set -euxo pipefail; \
+    echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bashrc
+
+ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
+    AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
+    PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}
+
+CMD ["/bin/bash"]
+
+

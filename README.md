@@ -168,3 +168,31 @@ bash docker_build.sh
 
 Pull the Docker image from Docker Hub: TODO.
 
+### openEuler + ROS 2 Humble (multi-arch)
+
+This repo also includes an openEuler-based ROS 2 Humble Dockerfile (built from source):
+
+- `ros2/openeuler/Dockerfile-openeuler-humble`
+
+Build a multi-arch image (requires Docker Buildx):
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t unitree-go2:humble-openeuler \
+  -f ros2/openeuler/Dockerfile-openeuler-humble \
+  .
+```
+
+If `rosdep` cannot resolve dependencies on your openEuler release, try overriding the OS mapping:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --build-arg ROSDEP_OS_OVERRIDE=centos:8 \
+  --build-arg ROSDEP_ALLOW_FAIL=1 \
+  -t unitree-go2:humble-openeuler \
+  -f ros2/openeuler/Dockerfile-openeuler-humble \
+  .
+```
+
