@@ -107,7 +107,7 @@ RUN set -euxo pipefail; \
 
 # ===== GStreamer =====
 # Install GStreamer and PyGObject dependencies
-# Note: Must install cairo runtime library before cairo-devel for pkg-config to work
+# Note: python3-ninja is already installed by AGIROS, so we skip ninja-build to avoid conflict
 RUN set -euxo pipefail; \
     dnf -y install \
       cairo \
@@ -124,13 +124,28 @@ RUN set -euxo pipefail; \
       python3-gobject \
       python3-cairo \
       meson \
-      ninja-build \
       && dnf clean all; \
     rm -rf /var/cache/dnf
-# Verify cairo is found by pkg-config
-RUN pkg-config --exists cairo && echo "✓ cairo found by pkg-config" || (echo "✗ cairo not found" && pkg-config --list-all | grep cairo || true)
-# Install PyGObject using pip
-RUN python3 -m pip install --no-cache-dir PyGObject
+# Verify cairo pkg-config files are available
+RUN set -euxo pipefail; \
+    if pkg-config --exists cairo; then \
+      echo "✓ cairo found by pkg-config"; \
+      pkg-config --modversion cairo; \
+    else \
+      echo "✗ cairo not found by pkg-config"; \
+      echo "Checking pkg-config paths:"; \
+      pkg-config --variable pc_path pkg-config; \
+      find /usr/lib64/pkgconfig /usr/share/pkgconfig -name "cairo.pc" 2>/dev/null || true; \
+      exit 1; \
+    fi
+# Use system python3-gobject if available, otherwise install from pip
+RUN set -euxo pipefail; \
+    if python3 -c "import gi" 2>/dev/null; then \
+      echo "✓ PyGObject available via system package"; \
+    else \
+      echo "Installing PyGObject from pip..."; \
+      python3 -m pip install --no-cache-dir PyGObject; \
+    fi
 # Run test file to check if PyGObject is installed correctly
 WORKDIR /root/src
 RUN python3 /root/src/tests/test_gi.py
