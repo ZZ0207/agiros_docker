@@ -89,12 +89,20 @@ RUN set -euxo pipefail; \
       exit 1; \
     fi
 
-# Update package lists and install ROS Humble packages
+# Install ROS Humble packages.
+# Note: Installing `ros-humble-*` is extremely large and can exceed CI runner disk limits.
 # Reference: https://docs.openeuler.org/zh/docs/24.03_LTS_SP3/tools/application/ros/installation_and_deployment.html
+ARG ROS_INSTALL_SET=ros-base
 RUN set -euxo pipefail; \
-    dnf update -y && \
-    dnf install -y "ros-humble-*" --skip-broken --exclude=ros-humble-generate-parameter-library-example && \
-    dnf clean all && \
+    dnf update -y; \
+    if [[ "${ROS_INSTALL_SET}" == "all" ]]; then \
+      dnf install -y "ros-humble-*" --skip-broken --exclude=ros-humble-generate-parameter-library-example; \
+    elif [[ "${ROS_INSTALL_SET}" == "desktop" ]]; then \
+      dnf install -y ros-humble-desktop; \
+    else \
+      dnf install -y ros-humble-ros-base; \
+    fi; \
+    dnf clean all; \
     rm -rf /var/cache/dnf
 
 # Verify ROS Humble installation
