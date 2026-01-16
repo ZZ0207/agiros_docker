@@ -17,6 +17,9 @@ env:
   REGISTRY: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com
   AGIROS_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker
   ROS2_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-openeuler
+  AGIROS_UBUNTU_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu
+  ROS2_FOXY_UBUNTU_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-foxy-ubuntu
+  ROS2_HUMBLE_UBUNTU_IMAGE: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-ubuntu
 
 jobs:
   build-agiros-openeuler:
@@ -110,4 +113,141 @@ jobs:
           labels: ${{ steps.meta-ros2.outputs.labels }}
           # Note: Registry may not support buildkit cache format, using inline cache instead
           cache-from: type=registry,ref=${{ env.ROS2_IMAGE }}:latest
+          cache-to: type=inline
+
+  build-agiros-ubuntu:
+    name: Build AGIROS Ubuntu Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Login to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta-agiros-ubuntu
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.AGIROS_UBUNTU_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./agiros/ubuntu/Dockerfile-jammy
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-agiros-ubuntu.outputs.tags }}
+          labels: ${{ steps.meta-agiros-ubuntu.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.AGIROS_UBUNTU_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.AGIROS_UBUNTU_IMAGE }}:buildcache,mode=max
+
+  build-ros2-foxy-ubuntu:
+    name: Build ROS2 Foxy Ubuntu Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta-ros2-foxy-ubuntu
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ROS2_FOXY_UBUNTU_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./ros2/ubuntu/Dockerfile-foxy
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-ros2-foxy-ubuntu.outputs.tags }}
+          labels: ${{ steps.meta-ros2-foxy-ubuntu.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.ROS2_FOXY_UBUNTU_IMAGE }}:latest
+          cache-to: type=inline
+
+  build-ros2-humble-ubuntu:
+    name: Build ROS2 Humble Ubuntu Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta-ros2-humble-ubuntu
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ROS2_HUMBLE_UBUNTU_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./ros2/ubuntu/Dockerfile-humble
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-ros2-humble-ubuntu.outputs.tags }}
+          labels: ${{ steps.meta-ros2-humble-ubuntu.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.ROS2_HUMBLE_UBUNTU_IMAGE }}:latest
           cache-to: type=inline
