@@ -105,12 +105,15 @@ RUN set -euxo pipefail; \
     rm install.sh
 
 
+
 # ===== GStreamer =====
 # Install GStreamer + GI bindings from system packages.
 # Rationale:
 # - Installing PyGObject via pip pulls in pycairo built with meson+ninja, which conflicts with openEuler's python3-ninja/ninja-build packaging.
 # - System packages are sufficient for `gi` + GStreamer usage (tests/test_gi.py).
 RUN set -euxo pipefail; \
+    dnf config-manager --add-repo https://repo.openeuler.org/openEuler-24.03-LTS/OS/${TARGETARCH} && \
+    dnf clean all && dnf makecache && \
     dnf -y install \
       gobject-introspection \
       gobject-introspection-devel \
