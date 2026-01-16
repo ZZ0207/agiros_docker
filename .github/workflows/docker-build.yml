@@ -108,5 +108,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-ros2.outputs.tags }}
           labels: ${{ steps.meta-ros2.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.ROS2_IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ env.ROS2_IMAGE }}:buildcache,mode=max
+          # Note: Registry may not support buildkit cache format, using inline cache instead
+          cache-from: type=registry,ref=${{ env.ROS2_IMAGE }}:latest
+          cache-to: type=inline

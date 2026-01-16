@@ -85,5 +85,6 @@ jobs:
             ${{ env.ROS2_IMAGE }}:latest
             ${{ env.ROS2_IMAGE }}:${{ github.sha }}
             ${{ env.ROS2_IMAGE }}:${{ github.ref_name }}
-          cache-from: type=registry,ref=${{ env.ROS2_IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ env.ROS2_IMAGE }}:buildcache,mode=max
+          # Note: Registry may not support buildkit cache format, using inline cache instead
+          cache-from: type=registry,ref=${{ env.ROS2_IMAGE }}:latest
+          cache-to: type=inline

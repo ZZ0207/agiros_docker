@@ -121,9 +121,35 @@ RUN set -euxo pipefail; \
       gstreamer1-plugins-good \
       && dnf clean all; \
     rm -rf /var/cache/dnf
+# Verify python3-gobject installation and ensure gi module is accessible
+# On openEuler, python3-gobject installs gi to /usr/lib64/python3.x/site-packages or /usr/lib/python3.x/site-packages
+RUN set -euxo pipefail; \
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
+    echo "Python version: $PYTHON_VERSION"; \
+    rpm -q python3-gobject || (echo "✗ python3-gobject not installed" && exit 1); \
+    if python3 -c "import gi; print('✓ gi module available')" 2>&1; then \
+      echo "PyGObject working correctly"; \
+    else \
+      echo "gi module not in default path, checking locations..."; \
+      GI_LOCATIONS=$(find /usr/lib* -path "*/python${PYTHON_VERSION}/site-packages/gi" -type d 2>/dev/null | head -3); \
+      if [ -n "$GI_LOCATIONS" ]; then \
+        echo "Found gi at: $GI_LOCATIONS"; \
+        for loc in $GI_LOCATIONS; do \
+          python3 -c "import sys; sys.path.insert(0, '$(dirname $loc)'); import gi; print('✓ gi module found at $(dirname $loc)')" && break; \
+        done || (echo "✗ Failed to import gi from found locations" && exit 1); \
+      else \
+        echo "✗ gi module not found in standard locations"; \
+        find /usr -name "gi" -type d 2>/dev/null | head -5; \
+        exit 1; \
+      fi; \
+    fi
 # Run test file to check if PyGObject is installed correctly
+# Ensure PYTHONPATH includes standard site-packages directories
 WORKDIR /root/src
-RUN python3 /root/src/tests/test_gi.py
+RUN set -euxo pipefail; \
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
+    export PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}"; \
+    python3 /root/src/tests/test_gi.py
 # ===== GStreamer =====
 
 
