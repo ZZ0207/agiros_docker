@@ -112,7 +112,6 @@ RUN set -euxo pipefail; \
 # - Installing PyGObject via pip pulls in pycairo built with meson+ninja, which conflicts with openEuler's python3-ninja/ninja-build packaging.
 # - System packages are sufficient for `gi` + GStreamer usage (tests/test_gi.py).
 RUN set -euxo pipefail; \
-    dnf config-manager --add-repo https://repo.openeuler.org/openEuler-24.03-LTS/OS/$(uname -m) \
     dnf -y install \
       gobject-introspection \
       gobject-introspection-devel \
@@ -129,6 +128,8 @@ RUN set -euxo pipefail; \
     PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
     echo "Python version: $PYTHON_VERSION"; \
     rpm -q python3-gobject || (echo "✗ python3-gobject not installed" && exit 1); \
+    PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}"; \
+    export PYTHONPATH; \
     if python3 -c "import gi; print('✓ gi module available')" 2>&1; then \
       echo "PyGObject working correctly"; \
     else \
@@ -136,12 +137,25 @@ RUN set -euxo pipefail; \
       GI_LOCATIONS=$(find /usr/lib* -path "*/python${PYTHON_VERSION}/site-packages/gi" -type d 2>/dev/null | head -3); \
       if [ -n "$GI_LOCATIONS" ]; then \
         echo "Found gi at: $GI_LOCATIONS"; \
+        GI_FOUND=0; \
         for loc in $GI_LOCATIONS; do \
-          python3 -c "import sys; sys.path.insert(0, '$(dirname $loc)'); import gi; print('✓ gi module found at $(dirname $loc)')" && break; \
-        done || (echo "✗ Failed to import gi from found locations" && exit 1); \
+          GI_DIR=$(dirname "$loc"); \
+          if python3 -c "import sys; sys.path.insert(0, '$GI_DIR'); import gi; print('✓ gi module found at $GI_DIR')" 2>&1; then \
+            echo "Successfully imported gi from $GI_DIR"; \
+            GI_FOUND=1; \
+            break; \
+          fi; \
+        done; \
+        if [ "$GI_FOUND" -eq 0 ]; then \
+          echo "✗ Failed to import gi from found locations"; \
+          exit 1; \
+        fi; \
       else \
         echo "✗ gi module not found in standard locations"; \
+        echo "Searching for gi module..."; \
         find /usr -name "gi" -type d 2>/dev/null | head -5; \
+        echo "Python sys.path:"; \
+        python3 -c "import sys; print('\n'.join(sys.path))"; \
         exit 1; \
       fi; \
     fi
@@ -190,11 +204,15 @@ RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 
 
 # Default ROS environment for interactive shells
+# Set PYTHONPATH to include standard site-packages directories for gi module
 RUN set -euxo pipefail; \
-    echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bashrc
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
+    echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bashrc; \
+    echo "export PYTHONPATH=\"/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:\${PYTHONPATH:-}\"" >> /etc/bashrc
 
 ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
     AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
     CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
     LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
     PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}

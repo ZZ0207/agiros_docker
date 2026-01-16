@@ -47,7 +47,6 @@ RUN set -euxo pipefail; \
       curl \
       wget \
       git \
-      which \
       findutils \
       tar \
       gzip \
@@ -158,6 +157,7 @@ RUN set -euxo pipefail; \
 
 ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
     AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
     CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
     LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64:${LD_LIBRARY_PATH:-} \
     PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}

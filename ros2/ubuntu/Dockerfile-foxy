@@ -17,9 +17,14 @@ RUN apt-get update && apt-get install -y \
     ros-foxy-rosidl-generator-dds-idl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy your entire repository into the container
-COPY . /src
 
+WORKDIR /root
+
+RUN set -euxo pipefail; \
+    mkdir -p /root/src
+COPY src/ /root/src/
+
+    
 # Install RViz2 and Gazebo
 RUN apt-get install --no-install-recommends -yqqq \
     ros-$ROS_DISTRO-rviz2 \
@@ -58,7 +63,7 @@ RUN apt-get update && apt-get install -y \
 # Install PyGObject using pip
 RUN pip3 install PyGObject
 # Run test file to check if PyGObject is installed correctly
-WORKDIR /src
+WORKDIR /root/src
 RUN python3 src/tests/test_gi.py
 # ===== GStreamer =====
 
@@ -68,7 +73,7 @@ RUN python3 src/tests/test_gi.py
 # Build the Unitree SDK:
 # Change to the unitree_sdk2 folder, make install.sh executable and run it,
 # then create a build directory, run cmake and make.
-WORKDIR /src/unitree_sdk2
+WORKDIR /root/src/unitree_sdk2
 RUN mkdir build && \
     cd build && \
     cmake .. && \
@@ -79,39 +84,25 @@ RUN mkdir build && \
 # ===== Installing unitree_ros2 =====
 # Following https://github.com/unitreerobotics/unitree_ros2
 # To get unitree_ros2 installed.
-WORKDIR /src/unitree_ros2/cyclonedds_ws/src
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
 RUN git clone https://github.com/ros2/rmw_cyclonedds -b foxy && \
     git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
     cd .. && \
     colcon build --packages-select cyclonedds
 # Now, source the ROS2 environment and build the rest of the packages,
 # skipping cyclone‑dds (which has already been built)
-WORKDIR /src/unitree_ros2/cyclonedds_ws
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "source /opt/ros/foxy/setup.bash && \
              pwd && \
              colcon build"
 # Double check whether the build was successful
-RUN ls -l /src/unitree_ros2/cyclonedds_ws
+RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====
 
-
-# Create a dedicated directory for your application code
-WORKDIR /src
-
-# Copy your docker_internal_setup.sh script into /src
-COPY docker_internal_setup.sh .
-
-# Make sure that pip points to pip3
-RUN rm -f /usr/bin/pip && ln -sf /usr/bin/pip3 /usr/bin/pip
-
-# Make sure that python points to python3
-RUN rm -f /usr/bin/python && ln -sf /usr/bin/python3 /usr/bin/python
-
-# Ensure that docker_internal_setup.sh is executable
-RUN chmod +x docker_internal_setup.sh
-
+RUN chmod +x /root/src/docker_internal_setup.sh && echo "source /root/src/docker_internal_setup.sh" >> /etc/bashrc
 ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
     ROS_DISTRO=${ROS_DISTRO} \
+    ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
     AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
     AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
     CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \

@@ -38,7 +38,6 @@ RUN set -euxo pipefail; \
       curl \
       wget \
       git \
-      which \
       findutils \
       tar \
       gzip \

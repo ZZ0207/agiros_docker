@@ -2,10 +2,10 @@
 echo "Setup unitree ros2 environment"
 
 echo "Sourcing ROS2 Foxy"
-source /opt/ros/foxy/setup.bash
+source ${ROS_INSTALL_BASE}/setup.bash
 
 echo "Sourcing unitree_ros2 workspace"
-source /app/unitree_ros2/cyclonedds_ws/install/setup.bash
+source /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
 
 echo "Setting RMW implementation to CycloneDDS"
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
