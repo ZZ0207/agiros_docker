@@ -1,14 +1,14 @@
 # Use the official ROS Foxy image as a base (Ubuntu 20.04)
-# Note: foxy-desktop may not support arm64, so we check TARGETPLATFORM
-# For arm64, we'll use ros-base and install desktop packages manually if needed
+# Official Docker Hub image supports both amd64 and arm64v8 architectures
+# Reference: https://hub.docker.com/_/ros/tags?name=foxy
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG ROS_DISTRO=foxy
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 
-# Use ros-base for all architectures to ensure compatibility
-# Desktop packages can be installed later if needed
-FROM osrf/ros:foxy-ros-base
+# Use official ros image (ros:foxy points to ros-foxy-ros-base-focal)
+# This supports both amd64 and arm64v8 architectures
+FROM ros:foxy-ros-base-focal
 
 # Set an environment variable for non-interactive installs
 ENV DEBIAN_FRONTEND=noninteractive

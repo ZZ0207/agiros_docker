@@ -128,7 +128,7 @@ RUN set -euxo pipefail; \
 # Rationale:
 # - Installing PyGObject via pip pulls in pycairo built with meson+ninja, which conflicts with openEuler's python3-ninja/ninja-build packaging.
 # - System packages are sufficient for `gi` + GStreamer usage (tests/test_gi.py).
-# Note: python3-gobject is available in agiros-third-packages repository (configured by agiros install script).
+# Note: python3-gobject may be in agiros-third-packages repository or OS repository.
 RUN set -euxo pipefail; \
     dnf clean all; \
     dnf makecache; \
@@ -142,16 +142,37 @@ RUN set -euxo pipefail; \
       libffi-devel \
       cairo-devel \
       pkgconf-pkg-config; \
-    dnf -y install python3-gobject --repo=agiros-third-packages || \
-      (echo "⚠ Failed to install from agiros-third-packages, trying all repos..." && \
-       dnf -y install python3-gobject || \
-       (echo "✗ python3-gobject installation failed from all repos" && \
-        echo "Available packages:" && \
-        dnf list available python3-gobject && \
-        echo "Installed repos:" && \
-        dnf repolist && \
-        exit 1)); \
-    rpm -q python3-gobject || (echo "✗ python3-gobject verification failed" && exit 1); \
+    echo "Checking available repositories..."; \
+    dnf repolist; \
+    echo "Attempting to install python3-gobject..."; \
+    PYTHON_GOBJECT_INSTALLED=0; \
+    if dnf repolist enabled | grep -q "agiros-third-packages"; then \
+      echo "agiros-third-packages repository found, trying to install from it..."; \
+      (dnf -y install python3-gobject --repo=agiros-third-packages && PYTHON_GOBJECT_INSTALLED=1) || \
+        (echo "⚠ Failed from agiros-third-packages, trying all repos..." && \
+         (dnf -y install python3-gobject && PYTHON_GOBJECT_INSTALLED=1) || true); \
+    else \
+      echo "agiros-third-packages repository not found, trying all repos..."; \
+      (dnf -y install python3-gobject && PYTHON_GOBJECT_INSTALLED=1) || \
+        (echo "⚠ Failed to install from system repos, checking if available..." && \
+         dnf list available python3-gobject && \
+         echo "Trying to install from OS repository explicitly..." && \
+         (dnf -y install python3-gobject --repo=OS && PYTHON_GOBJECT_INSTALLED=1) || true); \
+    fi; \
+    if [ "$PYTHON_GOBJECT_INSTALLED" = "0" ]; then \
+      if ! rpm -q python3-gobject 2>/dev/null; then \
+        echo "python3-gobject not found in repos, installing via pip as fallback..."; \
+        python3 -m pip install --no-cache-dir PyGObject; \
+      else \
+        PYTHON_GOBJECT_INSTALLED=1; \
+      fi; \
+    fi; \
+    if ! rpm -q python3-gobject 2>/dev/null && ! python3 -c "import gi" 2>/dev/null; then \
+      echo "✗ python3-gobject installation and verification failed"; \
+      exit 1; \
+    else \
+      echo "✓ python3-gobject installed successfully"; \
+    fi; \
     dnf clean all; \
     rm -rf /var/cache/dnf
 # Verify PyGObject installation and ensure gi module is accessible

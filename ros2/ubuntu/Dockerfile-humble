@@ -1,13 +1,14 @@
 # Use the official ROS Humble image as a base (Ubuntu 22.04)
-# Note: humble-desktop may not support arm64, so we use ros-base for all architectures
-# Desktop packages can be installed later if needed
+# Official Docker Hub image supports both amd64 and arm64v8 architectures
+# Reference: https://hub.docker.com/_/ros/tags?name=humble
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG ROS_DISTRO=humble
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 
-# Use ros-base for all architectures to ensure compatibility
-FROM osrf/ros:humble-ros-base
+# Use official ros image (ros:humble points to ros-humble-ros-base-jammy)
+# This supports both amd64 and arm64v8 architectures
+FROM ros:humble-ros-base-jammy
 
 # Set an environment variable for non-interactive installs
 ENV DEBIAN_FRONTEND=noninteractive
