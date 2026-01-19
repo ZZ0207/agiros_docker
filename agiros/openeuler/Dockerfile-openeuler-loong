@@ -41,6 +41,23 @@ RUN set -euxo pipefail; \
     mkdir -p /root/src
 COPY src/ /root/src/
 
+# Configure openEuler repositories to ensure all packages are available
+# python3-gobject is in the OS repository, but repos may not be fully configured in base image
+RUN set -euxo pipefail; \
+    ARCH=$(uname -m); \
+    if [ "$ARCH" = "x86_64" ]; then \
+      BASearch="x86_64"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+      BASearch="aarch64"; \
+    else \
+      BASearch="$ARCH"; \
+    fi; \
+    if [ ! -f /etc/yum.repos.d/openEuler.repo ] || ! grep -q "\[OS\]" /etc/yum.repos.d/openEuler.repo 2>/dev/null; then \
+      printf '[OS]\nname=openEuler-24.03-LTS-OS\nbaseurl=https://repo.openeuler.org/openEuler-24.03-LTS/OS/%s/\nenabled=1\ngpgcheck=1\ngpgkey=https://repo.openeuler.org/openEuler-24.03-LTS/OS/%s/RPM-GPG-KEY-openEuler\n\n' "$BASearch" "$BASearch" > /etc/yum.repos.d/openEuler.repo; \
+    fi; \
+    dnf clean all; \
+    dnf makecache
+
 # Base build tooling + common ROS2 deps (RPM names are "RHEL-like"; some may vary by openEuler release).
 RUN set -euxo pipefail; \
     dnf -y update; \
@@ -111,7 +128,10 @@ RUN set -euxo pipefail; \
 # Rationale:
 # - Installing PyGObject via pip pulls in pycairo built with meson+ninja, which conflicts with openEuler's python3-ninja/ninja-build packaging.
 # - System packages are sufficient for `gi` + GStreamer usage (tests/test_gi.py).
+# Note: python3-gobject is available in openEuler OS repository, but repos must be properly configured.
 RUN set -euxo pipefail; \
+    dnf clean all; \
+    dnf makecache; \
     dnf -y install \
       gobject-introspection \
       gobject-introspection-devel \
@@ -120,14 +140,18 @@ RUN set -euxo pipefail; \
       gstreamer1 \
       gstreamer1-plugins-base \
       gstreamer1-plugins-good \
+      libffi-devel \
+      cairo-devel \
+      pkgconf-pkg-config \
       && dnf clean all; \
-    rm -rf /var/cache/dnf
-# Verify python3-gobject installation and ensure gi module is accessible
+    rm -rf /var/cache/dnf; \
+    rpm -q python3-gobject || (echo "✗ python3-gobject installation failed" && dnf list available python3-gobject && exit 1)
+# Verify PyGObject installation and ensure gi module is accessible
 # On openEuler, python3-gobject installs gi to /usr/lib64/python3.x/site-packages or /usr/lib/python3.x/site-packages
+# If installed via pip, it will be in the pip site-packages directory
 RUN set -euxo pipefail; \
     PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
     echo "Python version: $PYTHON_VERSION"; \
-    rpm -q python3-gobject || (echo "✗ python3-gobject not installed" && exit 1); \
     PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}"; \
     export PYTHONPATH; \
     if python3 -c "import gi; print('✓ gi module available')" 2>&1; then \
@@ -135,20 +159,28 @@ RUN set -euxo pipefail; \
     else \
       echo "gi module not in default path, checking locations..."; \
       GI_LOCATIONS=$(find /usr/lib* -path "*/python${PYTHON_VERSION}/site-packages/gi" -type d 2>/dev/null | head -3); \
+      PIP_GI_LOCATION=$(python3 -m pip show PyGObject 2>/dev/null | grep Location | cut -d' ' -f2); \
+      if [ -n "$PIP_GI_LOCATION" ]; then \
+        echo "Found PyGObject installed via pip at: $PIP_GI_LOCATION"; \
+        GI_LOCATIONS="$GI_LOCATIONS $PIP_GI_LOCATION/gi"; \
+      fi; \
       if [ -n "$GI_LOCATIONS" ]; then \
         echo "Found gi at: $GI_LOCATIONS"; \
         GI_FOUND=0; \
         for loc in $GI_LOCATIONS; do \
-          GI_DIR=$(dirname "$loc"); \
-          if python3 -c "import sys; sys.path.insert(0, '$GI_DIR'); import gi; print('✓ gi module found at $GI_DIR')" 2>&1; then \
-            echo "Successfully imported gi from $GI_DIR"; \
-            GI_FOUND=1; \
-            break; \
+          if [ -d "$loc" ]; then \
+            GI_DIR=$(dirname "$loc"); \
+            if python3 -c "import sys; sys.path.insert(0, '$GI_DIR'); import gi; print('✓ gi module found at $GI_DIR')" 2>&1; then \
+              echo "Successfully imported gi from $GI_DIR"; \
+              GI_FOUND=1; \
+              break; \
+            fi; \
           fi; \
         done; \
         if [ "$GI_FOUND" -eq 0 ]; then \
           echo "✗ Failed to import gi from found locations"; \
-          exit 1; \
+          echo "Trying direct import..."; \
+          python3 -c "import gi; print('✓ gi module available')" || exit 1; \
         fi; \
       else \
         echo "✗ gi module not found in standard locations"; \
@@ -156,7 +188,8 @@ RUN set -euxo pipefail; \
         find /usr -name "gi" -type d 2>/dev/null | head -5; \
         echo "Python sys.path:"; \
         python3 -c "import sys; print('\n'.join(sys.path))"; \
-        exit 1; \
+        echo "Trying direct import..."; \
+        python3 -c "import gi; print('✓ gi module available')" || exit 1; \
       fi; \
     fi
 # Run test file to check if PyGObject is installed correctly

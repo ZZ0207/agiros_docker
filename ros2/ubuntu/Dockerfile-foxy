@@ -64,7 +64,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install PyGObject
 # Run test file to check if PyGObject is installed correctly
 WORKDIR /root/src
-RUN python3 src/tests/test_gi.py
+RUN python3 tests/test_gi.py
 # ===== GStreamer =====
 
 
@@ -99,7 +99,12 @@ RUN bash -c "source /opt/ros/foxy/setup.bash && \
 RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====
 
+# Create a dedicated directory for your application code
+WORKDIR /root/src
+
+# Ensure that docker_internal_setup.sh is executable
 RUN chmod +x /root/src/docker_internal_setup.sh && echo "source /root/src/docker_internal_setup.sh" >> /etc/bashrc
+
 ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
     ROS_DISTRO=${ROS_DISTRO} \
     ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
