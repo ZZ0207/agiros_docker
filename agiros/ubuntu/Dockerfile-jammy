@@ -144,6 +144,29 @@ RUN python3 /root/src/tests/test_gi.py
 # Build the Unitree SDK:
 # Change to the unitree_sdk2 folder, make install.sh executable and run it,
 # then create a build directory, run cmake and make.
+# Note: unitree_sdk2 is a git submodule, ensure it's properly initialized
+WORKDIR /root/src
+RUN set -euxo pipefail; \
+    if [ ! -f "unitree_sdk2/CMakeLists.txt" ]; then \
+      echo "⚠ unitree_sdk2 submodule not found, initializing..."; \
+      if [ -f ".gitmodules" ]; then \
+        git submodule update --init --recursive unitree_sdk2 || \
+        (echo "⚠ Git submodule init failed, cloning directly..." && \
+         rm -rf unitree_sdk2 && \
+         git clone --depth 1 https://github.com/unitreerobotics/unitree_sdk2.git unitree_sdk2); \
+      else \
+        echo "⚠ .gitmodules not found, cloning directly..."; \
+        rm -rf unitree_sdk2; \
+        git clone --depth 1 https://github.com/unitreerobotics/unitree_sdk2.git unitree_sdk2; \
+      fi; \
+    fi; \
+    if [ ! -f "unitree_sdk2/CMakeLists.txt" ]; then \
+      echo "✗ unitree_sdk2/CMakeLists.txt not found after initialization"; \
+      ls -la unitree_sdk2/ || true; \
+      exit 1; \
+    fi; \
+    echo "✓ unitree_sdk2 submodule ready"
+
 WORKDIR /root/src/unitree_sdk2
 RUN mkdir build && \
     cd build && \
@@ -154,6 +177,28 @@ RUN mkdir build && \
 # ===== Installing unitree_ros2 =====
 # Following https://github.com/unitreerobotics/unitree_ros2
 # To get unitree_ros2 installed.
+# Note: unitree_ros2 is a git submodule, ensure it's properly initialized
+WORKDIR /root/src
+RUN set -euxo pipefail; \
+    if [ ! -d "unitree_ros2" ] || ([ ! -f "unitree_ros2/.git" ] && [ ! -d "unitree_ros2/.git" ]); then \
+      echo "⚠ unitree_ros2 submodule not found, initializing..."; \
+      if [ -f ".gitmodules" ]; then \
+        git submodule update --init --recursive unitree_ros2 || \
+        (echo "⚠ Git submodule init failed, cloning directly..." && \
+         rm -rf unitree_ros2 && \
+         git clone --depth 1 https://github.com/unitreerobotics/unitree_ros2.git unitree_ros2); \
+      else \
+        echo "⚠ .gitmodules not found, cloning directly..."; \
+        rm -rf unitree_ros2; \
+        git clone --depth 1 https://github.com/unitreerobotics/unitree_ros2.git unitree_ros2; \
+      fi; \
+    fi; \
+    if [ ! -d "unitree_ros2" ]; then \
+      echo "✗ unitree_ros2 directory not found after initialization"; \
+      exit 1; \
+    fi; \
+    echo "✓ unitree_ros2 submodule ready"
+
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
 RUN git clone https://github.com/ros2/rmw_cyclonedds -b ${ROS_DISTRO} && \
     git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \

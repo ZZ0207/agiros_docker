@@ -8,11 +8,47 @@ on:
       - dev
     tags:
       - 'v*'
+    paths:
+      - 'agiros/**'
+      - 'ros2/**'
+      - '.github/workflows/docker-build-simple.yml'
+      - 'src/**'
   pull_request:
     branches:
       - master
       - main
+    paths:
+      - 'agiros/**'
+      - 'ros2/**'
+      - '.github/workflows/docker-build-simple.yml'
+      - 'src/**'
   workflow_dispatch:
+    inputs:
+      build_agiros_openeuler:
+        description: 'Build AGIROS openEuler Image'
+        required: false
+        default: true
+        type: boolean
+      build_ros2_openeuler:
+        description: 'Build ROS2 Humble openEuler Image'
+        required: false
+        default: true
+        type: boolean
+      build_agiros_ubuntu:
+        description: 'Build AGIROS Ubuntu Image'
+        required: false
+        default: true
+        type: boolean
+      build_ros2_foxy_ubuntu:
+        description: 'Build ROS2 Foxy Ubuntu Image'
+        required: false
+        default: true
+        type: boolean
+      build_ros2_humble_ubuntu:
+        description: 'Build ROS2 Humble Ubuntu Image'
+        required: false
+        default: true
+        type: boolean
 
 env:
   REGISTRY: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com
@@ -26,6 +62,11 @@ jobs:
   build-agiros-openeuler:
     name: Build AGIROS openEuler Image
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_agiros_openeuler == true) ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, '[builder_imgs]')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -60,6 +101,11 @@ jobs:
   build-ros2-openeuler:
     name: Build ROS2 Humble openEuler Image
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_ros2_openeuler == true) ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, '[builder_imgs]')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -95,6 +141,11 @@ jobs:
   build-agiros-ubuntu:
     name: Build AGIROS Ubuntu Image
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_agiros_ubuntu == true) ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, '[builder_imgs]')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -129,6 +180,11 @@ jobs:
   build-ros2-foxy-ubuntu:
     name: Build ROS2 Foxy Ubuntu Image
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_ros2_foxy_ubuntu == true) ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, '[builder_imgs]')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -163,6 +219,11 @@ jobs:
   build-ros2-humble-ubuntu:
     name: Build ROS2 Humble Ubuntu Image
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_ros2_humble_ubuntu == true) ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, '[builder_imgs]')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
