@@ -200,7 +200,7 @@ RUN set -euxo pipefail; \
     echo "✓ unitree_ros2 submodule ready"
 
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
-RUN git clone https://github.com/ros2/rmw_cyclonedds -b ${ROS_DISTRO} && \
+RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
     git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
     cd .. && \
     colcon build --packages-select cyclonedds
