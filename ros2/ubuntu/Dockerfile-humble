@@ -1,10 +1,16 @@
-# Use the official ROS humble Desktop image as a base (Ubuntu 20.04)
-FROM osrf/ros:humble-desktop
+# Use the official ROS Humble image as a base (Ubuntu 22.04)
+# Note: humble-desktop may not support arm64, so we use ros-base for all architectures
+# Desktop packages can be installed later if needed
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG ROS_DISTRO=humble
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
+
+# Use ros-base for all architectures to ensure compatibility
+FROM osrf/ros:humble-ros-base
 
 # Set an environment variable for non-interactive installs
 ENV DEBIAN_FRONTEND=noninteractive
-ARG ROS_DISTRO=humble
-ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 
 # Update package lists and install additional packages (e.g., pip and other tools)
 RUN apt-get update && apt-get install -y \
@@ -23,10 +29,13 @@ RUN set -euxo pipefail; \
 COPY src/ /root/src/
 
 
-# Install RViz2 and Gazebo
-RUN apt-get install --no-install-recommends -yqqq \
-    ros-$ROS_DISTRO-rviz2 \
-    ros-$ROS_DISTRO-ros-gz
+# Install RViz2 and Gazebo (may not be available on all architectures)
+# Allow installation to fail on unsupported architectures (e.g., arm64)
+RUN set +e; \
+    apt-get install --no-install-recommends -yqqq \
+      ros-$ROS_DISTRO-rviz2 \
+      ros-$ROS_DISTRO-ros-gz || \
+    (echo "⚠ RViz2/Gazebo packages not available for this architecture, skipping..." && true)
 
 # Optional
 #--------------

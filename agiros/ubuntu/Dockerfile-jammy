@@ -92,12 +92,33 @@ RUN set -euxo pipefail; \
       pytest
 
 # Install agiros
+# Note: ntpdate may fail in Docker containers (Operation not permitted), but this is non-fatal
+# We run the install script and check if AGIROS was actually installed, ignoring ntpdate errors
 RUN set -euxo pipefail; \
     curl -fsSL "${AGIROS_INSTALL_URL}" -o install.sh; \
     chmod +x install.sh; \
     sed -i 's#</dev/tty#</dev/stdin#g' install.sh; \
-    printf "2\n" | bash ./install.sh; \
-    rm install.sh
+    set +e; \
+    printf "2\n" | bash ./install.sh > /tmp/install.log 2>&1; \
+    INSTALL_EXIT=$?; \
+    set -e; \
+    if [ $INSTALL_EXIT -ne 0 ]; then \
+      if grep -q "Can't adjust the time of day: Operation not permitted" /tmp/install.log; then \
+        echo "⚠ ntpdate error detected (non-fatal in containers), checking if AGIROS was installed..."; \
+        if [ -d "${AGIROS_INSTALL_BASE}" ] || [ -d "/opt/agiros" ]; then \
+          echo "✓ AGIROS appears to be installed despite ntpdate error"; \
+        else \
+          echo "✗ AGIROS installation failed"; \
+          cat /tmp/install.log; \
+          exit 1; \
+        fi; \
+      else \
+        echo "✗ AGIROS installation failed with exit code $INSTALL_EXIT"; \
+        cat /tmp/install.log; \
+        exit 1; \
+      fi; \
+    fi; \
+    rm -f install.sh /tmp/install.log
 
 # ===== GStreamer =====
 RUN set -euxo pipefail; \

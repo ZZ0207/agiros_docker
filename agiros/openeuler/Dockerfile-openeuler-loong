@@ -128,24 +128,32 @@ RUN set -euxo pipefail; \
 # Rationale:
 # - Installing PyGObject via pip pulls in pycairo built with meson+ninja, which conflicts with openEuler's python3-ninja/ninja-build packaging.
 # - System packages are sufficient for `gi` + GStreamer usage (tests/test_gi.py).
-# Note: python3-gobject is available in openEuler OS repository, but repos must be properly configured.
+# Note: python3-gobject is available in agiros-third-packages repository (configured by agiros install script).
 RUN set -euxo pipefail; \
     dnf clean all; \
     dnf makecache; \
     dnf -y install \
       gobject-introspection \
       gobject-introspection-devel \
-      python3-gobject \
       python3-cairo \
       gstreamer1 \
       gstreamer1-plugins-base \
       gstreamer1-plugins-good \
       libffi-devel \
       cairo-devel \
-      pkgconf-pkg-config \
-      && dnf clean all; \
-    rm -rf /var/cache/dnf; \
-    rpm -q python3-gobject || (echo "✗ python3-gobject installation failed" && dnf list available python3-gobject && exit 1)
+      pkgconf-pkg-config; \
+    dnf -y install python3-gobject --repo=agiros-third-packages || \
+      (echo "⚠ Failed to install from agiros-third-packages, trying all repos..." && \
+       dnf -y install python3-gobject || \
+       (echo "✗ python3-gobject installation failed from all repos" && \
+        echo "Available packages:" && \
+        dnf list available python3-gobject && \
+        echo "Installed repos:" && \
+        dnf repolist && \
+        exit 1)); \
+    rpm -q python3-gobject || (echo "✗ python3-gobject verification failed" && exit 1); \
+    dnf clean all; \
+    rm -rf /var/cache/dnf
 # Verify PyGObject installation and ensure gi module is accessible
 # On openEuler, python3-gobject installs gi to /usr/lib64/python3.x/site-packages or /usr/lib/python3.x/site-packages
 # If installed via pip, it will be in the pip site-packages directory
