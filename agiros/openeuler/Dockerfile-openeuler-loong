@@ -240,7 +240,7 @@ WORKDIR /root/src/unitree_sdk2
 RUN mkdir build && \
     cd build && \
     cmake .. && \
-    sudo make install
+    make install
 # ===== Installing unitree_sdk2 =====
 
 

@@ -76,8 +76,22 @@ RUN apt-get update && apt-get install -y \
     libgstreamer1.0-dev \
     gir1.2-gstreamer-1.0 \
     && rm -rf /var/lib/apt/lists/*
-# Install PyGObject using pip
-RUN pip3 install PyGObject
+
+# Install PyGObject - try system package first, fallback to pip with build dependencies
+RUN set -euxo pipefail; \
+    if apt-cache show python3-gi 2>/dev/null | grep -q "Package: python3-gi"; then \
+      echo "Installing python3-gi from system packages..."; \
+      apt-get update && apt-get install -y --no-install-recommends python3-gi && \
+      rm -rf /var/lib/apt/lists/*; \
+    else \
+      echo "python3-gi not available in repos, installing PyGObject via pip with build dependencies..."; \
+      apt-get update && apt-get install -y --no-install-recommends \
+        meson \
+        ninja-build \
+        python3-setuptools \
+        && rm -rf /var/lib/apt/lists/*; \
+      pip3 install --no-cache-dir PyGObject; \
+    fi
 # Run test file to check if PyGObject is installed correctly
 WORKDIR /root/src
 RUN python3 tests/test_gi.py
@@ -92,7 +106,7 @@ WORKDIR /root/src/unitree_sdk2
 RUN mkdir build && \
     cd build && \
     cmake .. && \
-    sudo make install
+    make install
 # ===== Installing unitree_sdk2 =====
 
 
