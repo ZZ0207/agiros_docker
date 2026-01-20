@@ -33,12 +33,22 @@ RUN apt-get update && apt-get install -y \
     ros-humble-rosidl-generator-dds-idl \
     ros-humble-rosidl-generator-c \
     ros-humble-rosidl-generator-cpp \
+    ros-humble-rosidl-default-generators \
+    ros-humble-rosidl-default-runtime \
     ros-humble-rosidl-typesupport-c \
     ros-humble-rosidl-typesupport-cpp \
     ros-humble-rosidl-typesupport-introspection-c \
     ros-humble-rosidl-typesupport-introspection-cpp \
     ros-humble-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
+
+# Some arm64 images install ROS libs in a multiarch dir; add a fallback symlink
+RUN set -euxo pipefail; \
+    if [ -f /opt/ros/humble/lib/aarch64-linux-gnu/libbuiltin_interfaces__rosidl_generator_c.so ] && \
+       [ ! -f /opt/ros/humble/lib/libbuiltin_interfaces__rosidl_generator_c.so ]; then \
+      ln -s /opt/ros/humble/lib/aarch64-linux-gnu/libbuiltin_interfaces__rosidl_generator_c.so \
+            /opt/ros/humble/lib/libbuiltin_interfaces__rosidl_generator_c.so; \
+    fi
 
 WORKDIR /root
 

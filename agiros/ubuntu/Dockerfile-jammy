@@ -208,8 +208,16 @@ RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
 # Now, source the ROS2 environment and build the rest of the packages,
 # skipping cyclone‑dds (which has already been built)
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
-#修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
-RUN cp agiros/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh && chmod +x /root/src/unitree_ros2/setup.sh
+# 修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+RUN set -euxo pipefail; \
+    if [ -f /root/src/agiros/agiros_cyclonedds_setup.sh ]; then \
+      cp /root/src/agiros/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh; \
+      chmod +x /root/src/unitree_ros2/setup.sh; \
+    else \
+      echo "✗ /root/src/agiros/agiros_cyclonedds_setup.sh not found"; \
+      ls -la /root/src/agiros/ || true; \
+      exit 1; \
+    fi
 RUN bash -c "source /opt/agiros/${ROS_DISTRO}/setup.bash && \
              pwd && \
              colcon build"
