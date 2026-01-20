@@ -24,6 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 
 # Update package lists and install additional packages (e.g., pip and other tools)
+# Install ROS2 development packages needed for building custom packages
 RUN apt-get update && apt-get install -y \
     python3-pip \
     iputils-ping \
@@ -31,6 +32,13 @@ RUN apt-get update && apt-get install -y \
     vim \
     ros-foxy-rmw-cyclonedds-cpp \
     ros-foxy-rosidl-generator-dds-idl \
+    ros-foxy-rosidl-generator-c \
+    ros-foxy-rosidl-generator-cpp \
+    ros-foxy-rosidl-typesupport-c \
+    ros-foxy-rosidl-typesupport-cpp \
+    ros-foxy-rosidl-typesupport-introspection-c \
+    ros-foxy-rosidl-typesupport-introspection-cpp \
+    ros-foxy-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
 

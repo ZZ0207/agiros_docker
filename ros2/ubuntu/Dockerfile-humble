@@ -23,6 +23,7 @@ ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Update package lists and install additional packages (e.g., pip and other tools)
+# Install ROS2 development packages needed for building custom packages
 RUN apt-get update && apt-get install -y \
     python3-pip \
     iputils-ping \
@@ -30,6 +31,13 @@ RUN apt-get update && apt-get install -y \
     vim \
     ros-humble-rmw-cyclonedds-cpp \
     ros-humble-rosidl-generator-dds-idl \
+    ros-humble-rosidl-generator-c \
+    ros-humble-rosidl-generator-cpp \
+    ros-humble-rosidl-typesupport-c \
+    ros-humble-rosidl-typesupport-cpp \
+    ros-humble-rosidl-typesupport-introspection-c \
+    ros-humble-rosidl-typesupport-introspection-cpp \
+    ros-humble-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root

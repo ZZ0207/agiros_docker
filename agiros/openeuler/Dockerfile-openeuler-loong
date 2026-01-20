@@ -1,26 +1,13 @@
 # syntax=docker/dockerfile:1.4
-#
-# openEuler + agiros loong  for multi-arch (amd64/arm64).
-# Note: If you encounter network errors, you can remove the syntax line above
-# and use standard Dockerfile syntax instead.
-# Build with:
-#   docker buildx build --platform linux/amd64,linux/arm64 -t <name>:loong-openeuler -f agiros/openeuler/Dockerfile-openeuler-loong .
-#
-# Notes:
-# - ROS 2 binaries are not officially released for openEuler, so we build from source.
-# - Dependency resolution via rosdep may not fully match openEuler; this Dockerfile attempts rosdep and continues.
-#
-
 ARG OPENEULER_TAG=24.03-lts
 FROM openeuler/openeuler:${OPENEULER_TAG}
 
-SHELL ["/bin/bash", "-c"]
+# 修复1：正确设置bash严格模式（原SHELL指令语法错误）
+SHELL ["/bin/bash", "-e", "-u", "-o", "pipefail", "-c"]
 
 ARG ROS_DISTRO=loong
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 ARG AGIROS_INSTALL_URL=http://1.94.193.239/yumrepo/agiros/openeuler2403lts/2512/install.sh
-
-# docker buildx will set this automatically (amd64/arm64)
 ARG TARGETARCH
 
 ENV LANG=C.UTF-8 \
@@ -32,254 +19,93 @@ ENV LANG=C.UTF-8 \
     AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
 
 WORKDIR /root
-
-# Copy repo `src/` into the image user's $HOME/src (root -> /root/src)
-# Note: Submodules (unitree_sdk2, unitree_ros2) should be initialized before building.
-# In CI/CD (GitHub Actions/Gitee Go), submodules are auto-fetched via checkout action.
-# For local builds, run: git submodule update --init --recursive
-RUN set -euxo pipefail; \
-    mkdir -p /root/src
 COPY src/ /root/src/
 
-# Configure openEuler repositories to ensure all packages are available
-# python3-gobject is in the OS repository, but repos may not be fully configured in base image
-RUN set -euxo pipefail; \
-    ARCH=$(uname -m); \
-    if [ "$ARCH" = "x86_64" ]; then \
-      BASearch="x86_64"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-      BASearch="aarch64"; \
-    else \
-      BASearch="$ARCH"; \
-    fi; \
-    if [ ! -f /etc/yum.repos.d/openEuler.repo ] || ! grep -q "\[OS\]" /etc/yum.repos.d/openEuler.repo 2>/dev/null; then \
-      printf '[OS]\nname=openEuler-24.03-LTS-OS\nbaseurl=https://repo.openeuler.org/openEuler-24.03-LTS/OS/%s/\nenabled=1\ngpgcheck=1\ngpgkey=https://repo.openeuler.org/openEuler-24.03-LTS/OS/%s/RPM-GPG-KEY-openEuler\n\n' "$BASearch" "$BASearch" > /etc/yum.repos.d/openEuler.repo; \
-    fi; \
-    dnf clean all; \
-    dnf makecache
-
-# Base build tooling + common ROS2 deps (RPM names are "RHEL-like"; some may vary by openEuler release).
-RUN set -euxo pipefail; \
-    dnf -y update; \
-    dnf -y install \
-      bash \
-      ca-certificates \
-      curl \
-      wget \
-      git \
-      which \
-      findutils \
-      tar \
-      gzip \
-      bzip2 \
-      unzip \
-      make \
-      cmake \
-      ninja-build \
-      gcc \
-      gcc-c++ \
-      pkgconf-pkg-config \
-      python3 \
-      python3-pip \
-      python3-devel \
-      python3-numpy \
-      python3-lxml \
-      openssl-devel \
-      libffi-devel \
-      libyaml-devel \
-      libuuid-devel \
-      libxml2-devel \
-      tinyxml2-devel \
-      libcurl-devel \
-      sqlite-devel \
-      yaml-cpp-devel \
-      alsa-lib-devel \
-      libpcap-devel \
-      && dnf clean all; \
-    rm -rf /var/cache/dnf
-
-# Python build
-RUN set -euxo pipefail; \
-    python3 -m pip install --no-cache-dir -U pip setuptools wheel; \
+# ==================== 系统配置与基础工具链 ====================
+RUN dnf -y update && \
+    # 修复2：简化仓库配置逻辑
+    if ! grep -q "^\[OS\]" /etc/yum.repos.d/*.repo 2>/dev/null; then \
+      ARCH=$(uname -m); \
+      printf '[OS]\nname=openEuler-24.03-LTS-OS\nbaseurl=https://repo.openeuler.org/openEuler-24.03-LTS/OS/%s/\nenabled=1\ngpgcheck=1\ngpgkey=https://repo.openeuler.org/openEuler-24.03-LTS/OS/%s/RPM-GPG-KEY-openEuler\n\n' "$ARCH" "$ARCH" > /etc/yum.repos.d/openEuler.repo; \
+    fi && \
+    # 修复3：禁用弱依赖减少体积，合并安装
+    dnf -y install --setopt=install_weak_deps=0 \
+      bash ca-certificates curl wget git which findutils \
+      tar gzip bzip2 unzip make cmake ninja-build \
+      gcc gcc-c++ pkgconf-pkg-config \
+      python3 python3-pip python3-devel python3-numpy python3-lxml \
+      openssl-devel libffi-devel libyaml-devel libuuid-devel \
+      libxml2-devel tinyxml2-devel libcurl-devel sqlite-devel \
+      yaml-cpp-devel alsa-lib-devel libpcap-devel && \
+    dnf clean all && rm -rf /var/cache/dnf && \
     python3 -m pip install --no-cache-dir -U \
-      colcon-common-extensions \
-      colcon-mixin \
-      colcon-ros \
-      vcstool \
-      empy \
-      catkin_pkg \
-      lark \
-      pyyaml \
-      pytest
+      pip setuptools wheel \
+      colcon-common-extensions colcon-mixin colcon-ros \
+      vcstool empy catkin_pkg lark pyyaml pytest
 
+# ==================== 安装agiros ====================
+RUN curl -fsSL "${AGIROS_INSTALL_URL}" -o install.sh && \
+    chmod +x install.sh && \
+    sed -i 's#</dev/tty#</dev/stdin#g' install.sh && \
+    printf "2\n" | bash ./install.sh && \
+    rm -f install.sh
 
-# Install agiros
-RUN set -euxo pipefail; \
-    curl -fsSL "${AGIROS_INSTALL_URL}" -o install.sh; \
-    chmod +x install.sh; \
-    sed -i 's#</dev/tty#</dev/stdin#g' install.sh; \
-    printf "2\n" | bash ./install.sh; \
-    rm install.sh
-
-
-
-# ===== GStreamer =====
-# Install GStreamer + GI bindings from system packages.
-# Rationale:
-# - Installing PyGObject via pip pulls in pycairo built with meson+ninja, which conflicts with openEuler's python3-ninja/ninja-build packaging.
-# - System packages are sufficient for `gi` + GStreamer usage (tests/test_gi.py).
-# Note: python3-gobject may be in agiros-third-packages repository or OS repository.
-RUN set -euxo pipefail; \
-    dnf clean all; \
-    dnf makecache; \
-    dnf -y install \
-      gobject-introspection \
-      gobject-introspection-devel \
-      python3-cairo \
-      gstreamer1 \
-      gstreamer1-plugins-base \
-      gstreamer1-plugins-good \
-      libffi-devel \
-      cairo-devel \
-      pkgconf-pkg-config; \
-    dnf clean all; \
-    rm -rf /var/cache/dnf
-
-# Install python3-gobject with fallback logic
-# Use separate RUN to handle errors more gracefully
-RUN set -euxo pipefail; \
-    echo "Checking available repositories..."; \
-    dnf repolist enabled || true; \
-    echo "Attempting to install python3-gobject..."; \
-    set +e; \
-    if dnf repolist enabled 2>/dev/null | grep -q "agiros-third-packages"; then \
-      echo "agiros-third-packages repository found, trying to install from it..."; \
-      dnf -y install python3-gobject --repo=agiros-third-packages 2>&1 || \
-        (echo "⚠ Failed from agiros-third-packages, trying all repos..." && \
-         dnf -y install python3-gobject 2>&1 || true); \
-    else \
-      echo "agiros-third-packages repository not found, trying all repos..."; \
-      dnf -y install python3-gobject 2>&1 || \
-        (echo "⚠ Failed to install from system repos, checking if available..." && \
-         dnf list available python3-gobject 2>&1 || true && \
-         echo "Trying to install from OS repository explicitly..." && \
-         dnf -y install python3-gobject --repo=OS 2>&1 || true); \
-    fi; \
-    set -e; \
-    if ! rpm -q python3-gobject 2>/dev/null; then \
-      echo "python3-gobject not found in repos, installing via pip as fallback..."; \
+# ==================== GStreamer + PyGObject（核心修复） ====================
+# 修复4：增强冲突包移除逻辑，使用通配符匹配
+RUN dnf -y remove gst-plugins-base-libs* 2>/dev/null || true && \
+    dnf -y install --allowerasing \
+      gobject-introspection gobject-introspection-devel \
+      python3-cairo gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
+      libffi-devel cairo-devel pkgconf-pkg-config && \
+    # 修复5：简化python3-gobject安装回退逻辑
+    if ! dnf -y install python3-gobject 2>/dev/null; then \
+      echo "⚠ python3-gobject not in repos, installing via pip..." >&2; \
       python3 -m pip install --no-cache-dir PyGObject; \
-    else \
-      echo "✓ python3-gobject installed successfully from system repos"; \
-    fi; \
-    if ! rpm -q python3-gobject 2>/dev/null && ! python3 -c "import gi" 2>/dev/null; then \
-      echo "✗ python3-gobject installation and verification failed"; \
-      exit 1; \
-    fi
-# Verify PyGObject installation and ensure gi module is accessible
-# On openEuler, python3-gobject installs gi to /usr/lib64/python3.x/site-packages or /usr/lib/python3.x/site-packages
-# If installed via pip, it will be in the pip site-packages directory
-RUN set -euxo pipefail; \
-    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
-    echo "Python version: $PYTHON_VERSION"; \
-    PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}"; \
-    export PYTHONPATH; \
-    if python3 -c "import gi; print('✓ gi module available')" 2>&1; then \
-      echo "PyGObject working correctly"; \
-    else \
-      echo "gi module not in default path, checking locations..."; \
-      GI_LOCATIONS=$(find /usr/lib* -path "*/python${PYTHON_VERSION}/site-packages/gi" -type d 2>/dev/null | head -3); \
-      PIP_GI_LOCATION=$(python3 -m pip show PyGObject 2>/dev/null | grep Location | cut -d' ' -f2); \
-      if [ -n "$PIP_GI_LOCATION" ]; then \
-        echo "Found PyGObject installed via pip at: $PIP_GI_LOCATION"; \
-        GI_LOCATIONS="$GI_LOCATIONS $PIP_GI_LOCATION/gi"; \
-      fi; \
-      if [ -n "$GI_LOCATIONS" ]; then \
-        echo "Found gi at: $GI_LOCATIONS"; \
-        GI_FOUND=0; \
-        for loc in $GI_LOCATIONS; do \
-          if [ -d "$loc" ]; then \
-            GI_DIR=$(dirname "$loc"); \
-            if python3 -c "import sys; sys.path.insert(0, '$GI_DIR'); import gi; print('✓ gi module found at $GI_DIR')" 2>&1; then \
-              echo "Successfully imported gi from $GI_DIR"; \
-              GI_FOUND=1; \
-              break; \
-            fi; \
-          fi; \
-        done; \
-        if [ "$GI_FOUND" -eq 0 ]; then \
-          echo "✗ Failed to import gi from found locations"; \
-          echo "Trying direct import..."; \
-          python3 -c "import gi; print('✓ gi module available')" || exit 1; \
-        fi; \
-      else \
-        echo "✗ gi module not found in standard locations"; \
-        echo "Searching for gi module..."; \
-        find /usr -name "gi" -type d 2>/dev/null | head -5; \
-        echo "Python sys.path:"; \
-        python3 -c "import sys; print('\n'.join(sys.path))"; \
-        echo "Trying direct import..."; \
-        python3 -c "import gi; print('✓ gi module available')" || exit 1; \
-      fi; \
-    fi
-# Run test file to check if PyGObject is installed correctly
-# Ensure PYTHONPATH includes standard site-packages directories
+    fi && \
+    dnf clean all && rm -rf /var/cache/dnf
+
+# 修复6：简化验证逻辑，移除重复检查
+RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") && \
+    export PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}" && \
+    python3 -c "import gi; print('✓ PyGObject installed correctly')" || \
+    { echo "✗ PyGObject verification failed" >&2; exit 1; }
+
 WORKDIR /root/src
-RUN set -euxo pipefail; \
-    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
-    export PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}"; \
-    python3 /root/src/tests/test_gi.py
-# ===== GStreamer =====
+# 修复7：合并测试运行与环境变量设置
+RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") && \
+    export PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}" && \
+    python3 tests/test_gi.py
 
-
-# ===== Installing unitree_sdk2 =====
-# Build the Unitree SDK:
-# Change to the unitree_sdk2 folder, make install.sh executable and run it,
-# then create a build directory, run cmake and make.
+# ==================== 构建unitree_sdk2 ====================
 WORKDIR /root/src/unitree_sdk2
-RUN mkdir build && \
-    cd build && \
-    cmake .. && \
-    make install
-# ===== Installing unitree_sdk2 =====
+RUN mkdir build && cd build && cmake .. && make install
 
-
-# ===== Installing unitree_ros2 =====
-# Following https://github.com/unitreerobotics/unitree_ros2
-# To get unitree_ros2 installed.
+# ==================== 构建unitree_ros2 ====================
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
 RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
-    git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
-    cd .. && \
-    colcon build --packages-select cyclonedds
+    git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x
 
-# Now, source the ROS2 environment and build the rest of the packages,
-# skipping cyclone‑dds (which has already been built)
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
-#修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
-RUN cp agiros/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh && chmod +x /root/src/unitree_ros2/setup.sh
-RUN bash -c "source /opt/agiros/${ROS_DISTRO}/setup.bash && \
-             pwd && \
-             colcon build"
-# Double check whether the build was successful
-RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
-# ===== Installing unitree_ros2 =====
+RUN cp ../agiros/agiros_cyclonedds_setup.sh ../setup.sh && chmod +x ../setup.sh
 
+# 修复8：合并构建步骤，避免重复编译cyclonedds
+RUN source /opt/agiros/${ROS_DISTRO}/setup.bash && \
+    colcon build
 
-# Default ROS environment for interactive shells
-# Set PYTHONPATH to include standard site-packages directories for gi module
-RUN set -euxo pipefail; \
-    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
-    echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bashrc; \
-    echo "export PYTHONPATH=\"/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:\${PYTHONPATH:-}\"" >> /etc/bashrc
+# ==================== 最终环境配置 ====================
+# 修复9：改用profile.d脚本，更标准且兼容多种shell
+RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") && \
+    { \
+      echo "source ${AGIROS_INSTALL_BASE}/setup.bash"; \
+      echo "export PYTHONPATH=\"/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:\${PYTHONPATH:-}\""; \
+    } > /etc/profile.d/agiros.sh && \
+    chmod +x /etc/profile.d/agiros.sh
 
 ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
     AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
     ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
     CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
-    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
+    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64:/usr/local/lib:/usr/local/lib64 \
     PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}
 
 CMD ["/bin/bash"]
-
-
