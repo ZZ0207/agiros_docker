@@ -213,6 +213,7 @@ jobs:
           labels: ${{ steps.meta-agiros-ubuntu.outputs.labels }}
           cache-from: type=registry,ref=${{ env.AGIROS_UBUNTU_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.AGIROS_UBUNTU_IMAGE }}:buildcache,mode=max
+          no-cache: true   # 强制重新构建所有层
 
   build-ros2-foxy-ubuntu:
     name: Build ROS2 Foxy Ubuntu Image
