@@ -42,17 +42,31 @@ RUN apt-get update && apt-get install -y \
     ros-humble-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
-# Some arm64 images install ROS libs in multiarch dirs; add a fallback symlink
+# 修复 ARM64 架构下的库路径问题 - 可靠版本
 RUN set -euxo pipefail; \
-    if [ ! -e /opt/ros/humble/lib/libbuiltin_interfaces__rosidl_generator_c.so ]; then \
-      shopt -s nullglob; \
-      for dir in /opt/ros/humble/lib/aarch64-linux-gnu /opt/ros/humble/lib/arm64-linux-gnu; do \
-        matches=("${dir}/libbuiltin_interfaces__rosidl_generator_c.so"*); \
-        if [ ${#matches[@]} -gt 0 ]; then \
-          ln -s "${matches[0]}" /opt/ros/humble/lib/libbuiltin_interfaces__rosidl_generator_c.so; \
-          break; \
+    LIB_NAME="libbuiltin_interfaces__rosidl_generator_c.so"; \
+    TARGET_PATH="/opt/ros/humble/lib/${LIB_NAME}"; \
+    if [ ! -e "${TARGET_PATH}" ]; then \
+      echo "⚠ ${TARGET_PATH} not found, searching in architecture directories..."; \
+      FOUND_LIB=$(find /opt/ros/humble/lib -name "${LIB_NAME}*" -type f 2>/dev/null | head -n 1); \
+      if [ -n "${FOUND_LIB}" ]; then \
+        echo "✓ Found library at: ${FOUND_LIB}"; \
+        mkdir -p /opt/ros/humble/lib; \
+        ln -sf "$(realpath --relative-to=/opt/ros/humble/lib "${FOUND_LIB}")" "${TARGET_PATH}"; \
+        if [ ! -L "${TARGET_PATH}" ] || [ ! -e "$(readlink -f "${TARGET_PATH}")" ]; then \
+          echo "✗ Symbolic link validation failed!"; \
+          ls -la "${TARGET_PATH}" || true; \
+          exit 1; \
         fi; \
-      done; \
+        echo "✓ Symlink created: ${TARGET_PATH} → $(readlink -f "${TARGET_PATH}")"; \
+      else \
+        echo "✗ ERROR: ${LIB_NAME} not found anywhere!"; \
+        echo "Searching for builtin_interfaces files:"; \
+        find /opt/ros/humble -name "*builtin_interfaces*" -type f 2>/dev/null | head -20 || true; \
+        exit 1; \
+      fi; \
+    else \
+      echo "✓ ${TARGET_PATH} already exists"; \
     fi
 
 WORKDIR /root
@@ -181,12 +195,27 @@ RUN set -euxo pipefail; \
     fi; \
     echo "✓ unitree_ros2 submodule ready"
 
+
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
 RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
     git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
     cd .. && \
     colcon build --packages-select cyclonedds
 # Now, source the ROS2 environment and build the rest of the packages,
+
+
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws
+
+# 安装所有 ROS 依赖（关键修复！必须在构建前执行）
+RUN bash -c "set -euxo pipefail; \
+    source /opt/ros/humble/setup.bash; \
+    rosdep init 2>/dev/null || true; \
+    rosdep update; \
+    # 安装 workspace 中所有包的依赖，跳过已构建的 cyclonedds 和 rmw_cyclonedds_cpp
+    rosdep install --from-paths src --ignore-src -r -y \
+      --skip-keys 'cyclonedds rmw_cyclonedds_cpp'"
+
+
 # skipping cyclone‑dds (which has already been built)
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "source /opt/ros/humble/setup.bash && \
