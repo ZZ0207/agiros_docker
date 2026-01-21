@@ -42,33 +42,6 @@ RUN apt-get update && apt-get install -y \
     ros-humble-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
-# 修复 ARM64 架构下的库路径问题 - 可靠版本
-RUN set -euxo pipefail; \
-    LIB_NAME="libbuiltin_interfaces__rosidl_generator_c.so"; \
-    TARGET_PATH="/opt/ros/humble/lib/${LIB_NAME}"; \
-    if [ ! -e "${TARGET_PATH}" ]; then \
-      echo "⚠ ${TARGET_PATH} not found, searching in architecture directories..."; \
-      FOUND_LIB=$(find /opt/ros/humble/lib -name "${LIB_NAME}*" -type f 2>/dev/null | head -n 1); \
-      if [ -n "${FOUND_LIB}" ]; then \
-        echo "✓ Found library at: ${FOUND_LIB}"; \
-        mkdir -p /opt/ros/humble/lib; \
-        ln -sf "$(realpath --relative-to=/opt/ros/humble/lib "${FOUND_LIB}")" "${TARGET_PATH}"; \
-        if [ ! -L "${TARGET_PATH}" ] || [ ! -e "$(readlink -f "${TARGET_PATH}")" ]; then \
-          echo "✗ Symbolic link validation failed!"; \
-          ls -la "${TARGET_PATH}" || true; \
-          exit 1; \
-        fi; \
-        echo "✓ Symlink created: ${TARGET_PATH} → $(readlink -f "${TARGET_PATH}")"; \
-      else \
-        echo "✗ ERROR: ${LIB_NAME} not found anywhere!"; \
-        echo "Searching for builtin_interfaces files:"; \
-        find /opt/ros/humble -name "*builtin_interfaces*" -type f 2>/dev/null | head -20 || true; \
-        exit 1; \
-      fi; \
-    else \
-      echo "✓ ${TARGET_PATH} already exists"; \
-    fi
-
 WORKDIR /root
 
 RUN set -euxo pipefail; \
@@ -218,6 +191,46 @@ RUN bash -c "set -exo pipefail; \
     # 安装 workspace 中所有包的依赖，跳过已构建的 cyclonedds 和 rmw_cyclonedds_cpp
     rosdep install --from-paths src --ignore-src -r -y \
       --skip-keys 'cyclonedds rmw_cyclonedds_cpp'"
+
+# ===== 修复 ARM64 架构下的库路径问题 - 增强版 =====
+# 在构建前确保所有必要的符号链接都已创建
+RUN set -euxo pipefail; \
+    # 需要修复的库列表
+    LIBS_TO_FIX=( \
+        "libbuiltin_interfaces__rosidl_generator_c.so" \
+        "libbuiltin_interfaces__rosidl_typesupport_c.so" \
+        "libbuiltin_interfaces__rosidl_typesupport_cpp.so" \
+        "libbuiltin_interfaces__rosidl_typesupport_introspection_c.so" \
+        "libbuiltin_interfaces__rosidl_typesupport_introspection_cpp.so" \
+    ); \
+    for LIB_NAME in "${LIBS_TO_FIX[@]}"; do \
+        TARGET_PATH="/opt/ros/humble/lib/${LIB_NAME}"; \
+        if [ ! -e "${TARGET_PATH}" ]; then \
+            echo "⚠ ${TARGET_PATH} not found, searching for ${LIB_NAME}..."; \
+            # 在 /opt/ros/humble/lib 下所有子目录中搜索
+            FOUND_LIB=$(find /opt/ros/humble/lib -name "${LIB_NAME}" -type f 2>/dev/null | head -n 1); \
+            if [ -n "${FOUND_LIB}" ]; then \
+                echo "✓ Found library at: ${FOUND_LIB}"; \
+                mkdir -p /opt/ros/humble/lib; \
+                ln -sf "$(realpath --relative-to=/opt/ros/humble/lib "${FOUND_LIB}")" "${TARGET_PATH}"; \
+                # 验证链接是否成功
+                if [ ! -L "${TARGET_PATH}" ] || [ ! -e "$(readlink -f "${TARGET_PATH}")" ]; then \
+                    echo "✗ Symbolic link validation failed!"; \
+                    ls -la "${TARGET_PATH}" || true; \
+                    exit 1; \
+                fi; \
+                echo "✓ Symlink created: ${TARGET_PATH} → $(readlink -f "${TARGET_PATH}")"; \
+            else \
+                echo "✗ ERROR: ${LIB_NAME} not found anywhere!"; \
+                echo "Searching for ${LIB_NAME} files:"; \
+                find /opt/ros/humble -name "*${LIB_NAME}*" -type f 2>/dev/null || true; \
+                exit 1; \
+            fi; \
+        else \
+            echo "✓ ${TARGET_PATH} already exists"; \
+        fi; \
+    done
+# ===== 修复 ARM64 架构下的库路径问题 =====
 
 
 # skipping cyclone‑dds (which has already been built)
