@@ -42,42 +42,55 @@ RUN apt-get update && apt-get install -y \
     ros-humble-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
-
-# ===== 修复 ARM64 架构下的库路径问题 - 自动发现版 =====
-# 自动为所有在架构特定目录中的库创建符号链接
+# ===== 增强版ARM64库路径修复 =====
 RUN set -euxo pipefail; \
-    # 定义可能的架构目录
-    ARCH_DIRS=("aarch64-linux-gnu" "arm-linux-gnueabihf"); \
-    for ARCH_DIR in "${ARCH_DIRS[@]}"; do \
-        ARCH_LIB_PATH="/opt/ros/humble/lib/${ARCH_DIR}"; \
-        if [ -d "${ARCH_LIB_PATH}" ]; then \
-            echo "✓ Found architecture-specific directory: ${ARCH_LIB_PATH}"; \
-            # 统计需要修复的库数量
-            LIB_COUNT=$(find "${ARCH_LIB_PATH}" -name "*.so*" -type f | wc -l); \
-            echo "Found ${LIB_COUNT} libraries to link..."; \
-            # 为该目录下的所有 .so 文件创建符号链接
-            find "${ARCH_LIB_PATH}" -name "*.so*" -type f | while read -r LIB_FILE; do \
-                LIB_NAME=$(basename "${LIB_FILE}"); \
-                TARGET_PATH="/opt/ros/humble/lib/${LIB_NAME}"; \
-                if [ ! -e "${TARGET_PATH}" ]; then \
-                    ln -sf "${ARCH_DIR}/${LIB_NAME}" "${TARGET_PATH}"; \
-                    # 验证链接是否成功
-                    if [ ! -L "${TARGET_PATH}" ] || [ ! -e "$(readlink -f "${TARGET_PATH}")" ]; then \
-                        echo "✗ Symbolic link validation failed: ${TARGET_PATH}"; \
-                        exit 1; \
+    if [ "$(uname -m)" = "aarch64" ]; then \
+        echo "=== ARM64库路径修复开始 ==="; \
+        # 修复所有ROS库
+        LIB_PATHS=$(find /opt/ros/humble -type d \( -name "aarch64-linux-gnu" -o -name "arm-linux-gnueabihf" \) -path "*/lib/*" 2>/dev/null); \
+        if [ -n "$LIB_PATHS" ]; then \
+            echo "找到架构特定目录:"; \
+            echo "$LIB_PATHS"; \
+            for arch_path in $LIB_PATHS; do \
+                arch_name=$(basename "$arch_path"); \
+                echo "处理 $arch_name 目录..."; \
+                find "$arch_path" -maxdepth 1 -name "*.so*" -type f 2>/dev/null | while read -r lib; do \
+                    lib_name=$(basename "$lib"); \
+                    target="/opt/ros/humble/lib/$lib_name"; \
+                    if [ ! -e "$target" ] && [ ! -L "$target" ]; then \
+                        ln -sf "$arch_name/$lib_name" "$target"; \
+                        echo "  链接: $lib_name"; \
                     fi; \
-                fi; \
+                done; \
             done; \
-            echo "✓ All libraries from ${ARCH_DIR} linked successfully"; \
         else \
-            echo "ℹ Architecture directory not found: ${ARCH_LIB_PATH}"; \
+            echo "未找到架构特定目录，检查标准位置..."; \
+            ls -la /opt/ros/humble/lib/ || true; \
         fi; \
-    done; \
-    # 列出已创建的链接（调试用）
-    echo "=== Created symbolic links ==="; \
-    ls -la /opt/ros/humble/lib/*.so* 2>/dev/null | head -20 || true; \
-    echo "ARM64 library path fix completed."
-# ===== ARM64 库路径修复完成 =====
+        echo "=== ARM64库路径修复完成 ==="; \
+    else \
+        echo "当前架构: $(uname -m)，跳过ARM64特定修复"; \
+    fi
+
+    
+# 特别修复builtin_interfaces
+RUN set -euxo pipefail; \
+    if [ "$(uname -m)" = "aarch64" ]; then \
+        echo "特别修复builtin_interfaces库..."; \
+        # 查找builtin_interfaces
+        find /opt/ros/humble -type f -path "*/aarch64-linux-gnu/*" -name "*builtin_interfaces*.so*" 2>/dev/null | while read -r lib; do \
+            lib_name=$(basename "$lib"); \
+            target="/opt/ros/humble/lib/$lib_name"; \
+            if [ ! -e "$target" ]; then \
+                echo "创建builtin_interfaces链接: $lib_name"; \
+                ln -sf "aarch64-linux-gnu/$lib_name" "$target"; \
+            fi; \
+        done; \
+        # 验证
+        echo "验证builtin_interfaces库:"; \
+        ls -la /opt/ros/humble/lib/*builtin_interfaces* 2>/dev/null || echo "警告: 未找到builtin_interfaces库"; \
+        find /opt/ros/humble -name "builtin_interfaces*" -type f | grep -v ".cmake" | head -10; \
+    fi
 
 
 WORKDIR /root
