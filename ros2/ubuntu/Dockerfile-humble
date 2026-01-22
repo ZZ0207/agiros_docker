@@ -42,6 +42,44 @@ RUN apt-get update && apt-get install -y \
     ros-humble-builtin-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
+
+# ===== 修复 ARM64 架构下的库路径问题 - 自动发现版 =====
+# 自动为所有在架构特定目录中的库创建符号链接
+RUN set -euxo pipefail; \
+    # 定义可能的架构目录
+    ARCH_DIRS=("aarch64-linux-gnu" "arm-linux-gnueabihf"); \
+    for ARCH_DIR in "${ARCH_DIRS[@]}"; do \
+        ARCH_LIB_PATH="/opt/ros/humble/lib/${ARCH_DIR}"; \
+        if [ -d "${ARCH_LIB_PATH}" ]; then \
+            echo "✓ Found architecture-specific directory: ${ARCH_LIB_PATH}"; \
+            # 统计需要修复的库数量
+            LIB_COUNT=$(find "${ARCH_LIB_PATH}" -name "*.so*" -type f | wc -l); \
+            echo "Found ${LIB_COUNT} libraries to link..."; \
+            # 为该目录下的所有 .so 文件创建符号链接
+            find "${ARCH_LIB_PATH}" -name "*.so*" -type f | while read -r LIB_FILE; do \
+                LIB_NAME=$(basename "${LIB_FILE}"); \
+                TARGET_PATH="/opt/ros/humble/lib/${LIB_NAME}"; \
+                if [ ! -e "${TARGET_PATH}" ]; then \
+                    ln -sf "${ARCH_DIR}/${LIB_NAME}" "${TARGET_PATH}"; \
+                    # 验证链接是否成功
+                    if [ ! -L "${TARGET_PATH}" ] || [ ! -e "$(readlink -f "${TARGET_PATH}")" ]; then \
+                        echo "✗ Symbolic link validation failed: ${TARGET_PATH}"; \
+                        exit 1; \
+                    fi; \
+                fi; \
+            done; \
+            echo "✓ All libraries from ${ARCH_DIR} linked successfully"; \
+        else \
+            echo "ℹ Architecture directory not found: ${ARCH_LIB_PATH}"; \
+        fi; \
+    done; \
+    # 列出已创建的链接（调试用）
+    echo "=== Created symbolic links ==="; \
+    ls -la /opt/ros/humble/lib/*.so* 2>/dev/null | head -20 || true; \
+    echo "ARM64 library path fix completed."
+# ===== ARM64 库路径修复完成 =====
+
+
 WORKDIR /root
 
 RUN set -euxo pipefail; \
@@ -188,42 +226,6 @@ RUN bash -c "set -exo pipefail; \
     rosdep update; \
     rosdep install --from-paths src --ignore-src -r -y \
       --skip-keys 'cyclonedds rmw_cyclonedds_cpp'"
-
-# ===== 修复 ARM64 架构下的库路径问题 - 自动发现版 =====
-# 自动为所有在架构特定目录中的库创建符号链接
-RUN set -euxo pipefail; \
-    # 定义可能的架构目录
-    ARCH_DIRS=("aarch64-linux-gnu" "arm-linux-gnueabihf"); \
-    for ARCH_DIR in "${ARCH_DIRS[@]}"; do \
-        ARCH_LIB_PATH="/opt/ros/humble/lib/${ARCH_DIR}"; \
-        if [ -d "${ARCH_LIB_PATH}" ]; then \
-            echo "✓ Found architecture-specific directory: ${ARCH_LIB_PATH}"; \
-            # 统计需要修复的库数量
-            LIB_COUNT=$(find "${ARCH_LIB_PATH}" -name "*.so*" -type f | wc -l); \
-            echo "Found ${LIB_COUNT} libraries to link..."; \
-            # 为该目录下的所有 .so 文件创建符号链接
-            find "${ARCH_LIB_PATH}" -name "*.so*" -type f | while read -r LIB_FILE; do \
-                LIB_NAME=$(basename "${LIB_FILE}"); \
-                TARGET_PATH="/opt/ros/humble/lib/${LIB_NAME}"; \
-                if [ ! -e "${TARGET_PATH}" ]; then \
-                    ln -sf "${ARCH_DIR}/${LIB_NAME}" "${TARGET_PATH}"; \
-                    # 验证链接是否成功
-                    if [ ! -L "${TARGET_PATH}" ] || [ ! -e "$(readlink -f "${TARGET_PATH}")" ]; then \
-                        echo "✗ Symbolic link validation failed: ${TARGET_PATH}"; \
-                        exit 1; \
-                    fi; \
-                fi; \
-            done; \
-            echo "✓ All libraries from ${ARCH_DIR} linked successfully"; \
-        else \
-            echo "ℹ Architecture directory not found: ${ARCH_LIB_PATH}"; \
-        fi; \
-    done; \
-    # 列出已创建的链接（调试用）
-    echo "=== Created symbolic links ==="; \
-    ls -la /opt/ros/humble/lib/*.so* 2>/dev/null | head -20 || true; \
-    echo "ARM64 library path fix completed."
-# ===== ARM64 库路径修复完成 =====
 
 # skipping cyclone‑dds (which has already been built)
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
