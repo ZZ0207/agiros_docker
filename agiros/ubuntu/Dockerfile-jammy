@@ -220,6 +220,25 @@ RUN set -euxo pipefail; \
     fi
 
 
+# Install ROS2 development packages that may not be included in AGIROS
+# AGIROS is based on ROS2 Humble, so we can install missing packages from standard ROS2 repos
+# This must be done after AGIROS installation to ensure ROS2 repos are configured
+RUN set -euxo pipefail; \
+    echo "=== 安装ROS2开发包 ==="; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      agiros-${ROS_DISTRO}-rosidl-generator-dds-idl \
+      agiros-${ROS_DISTRO}-rosidl-generator-c \
+      agiros-${ROS_DISTRO}-rosidl-generator-cpp \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-cpp \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-cpp \
+      agiros-${ROS_DISTRO}-builtin-interfaces || \
+    (echo "⚠ 某些agiros包安装失败，继续..." && true); \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*;
+
 # Initialize agirosdep and install package dependencies
 RUN bash -c "set -exo pipefail; \
     set +u; \
@@ -233,8 +252,8 @@ RUN bash -c "set -exo pipefail; \
 
 # Build unitree_ros2 packages
 RUN bash -c "source /opt/agiros/${ROS_DISTRO}/setup.bash && \
-             pwd && \
-             colcon build"
+            pwd && \
+            colcon build"
 # Double check whether the build was successful
 RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====
