@@ -98,7 +98,6 @@ WORKDIR /root
 RUN set -euxo pipefail; \
     mkdir -p /root/src
 COPY src/ /root/src/
-COPY agiros/ /root/src/agiros/
 
 
 # Install RViz2 and Gazebo (may not be available on all architectures)
