@@ -71,9 +71,20 @@ RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{s
     { echo "✗ PyGObject verification failed" >&2; exit 1; }
 
 # 修复7：合并测试运行与环境变量设置
-RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") && \
+RUN set -euxo pipefail; \
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") && \
     export PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}" && \
-    python3 /root/src/tests/test_gi.py
+    TEST_FILE="/root/src/tests/test_gi.py" && \
+    if [ ! -f "${TEST_FILE}" ]; then \
+        echo "✗ 测试文件不存在: ${TEST_FILE}"; \
+        echo "检查 /root/src 目录:"; \
+        ls -la /root/src/ || true; \
+        echo "检查 /root/src/tests 目录:"; \
+        ls -la /root/src/tests/ || true; \
+        exit 1; \
+    fi && \
+    echo "运行测试文件: ${TEST_FILE}" && \
+    python3 "${TEST_FILE}"
 
     
 WORKDIR /root/src
