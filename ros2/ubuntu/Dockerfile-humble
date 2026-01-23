@@ -233,12 +233,12 @@ WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 
 # 修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/setup.sh
 RUN set -euxo pipefail; \
-    if [ -f /root/src/agiros/agiros_cyclonedds_setup.sh ]; then \
-      cp /root/src/agiros/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh; \
+    if [ -f /root/src/ros_cyclonedds_setup.sh ]; then \
+      cp /root/src/ros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh; \
       chmod +x /root/src/unitree_ros2/setup.sh; \
     else \
-      echo "✗ /root/src/agiros/agiros_cyclonedds_setup.sh not found"; \
-      ls -la /root/src/agiros/ || true; \
+      echo "✗ /root/src/ros_cyclonedds_setup.sh not found"; \
+      ls -la /root/src/ros_cyclonedds_setup.sh || true; \
       exit 1; \
     fi
 
