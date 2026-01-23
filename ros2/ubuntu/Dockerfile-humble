@@ -340,7 +340,55 @@ RUN set -euxo pipefail; \
 
 # skipping cyclone‑dds (which has already been built)
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
-# 构建前确保库路径正确设置（特别是ARM64架构）
+# 构建前最后一次修复ARM64库路径（确保所有链接都已创建）
+RUN set -euxo pipefail; \
+    if [ "$(uname -m)" = "aarch64" ]; then \
+        echo "=== 构建前最终ARM64库路径修复 ==="; \
+        ARCH_LIB_DIR="/opt/ros/humble/lib/aarch64-linux-gnu"; \
+        if [ -d "${ARCH_LIB_DIR}" ]; then \
+            # 强制重新创建所有关键库的链接
+            for LIB in builtin_interfaces__rosidl_generator_c \
+                       builtin_interfaces__rosidl_typesupport_c \
+                       builtin_interfaces__rosidl_typesupport_introspection_c \
+                       rosidl_typesupport_c \
+                       rosidl_runtime_c; do \
+                LIB_FILE="${ARCH_LIB_DIR}/lib${LIB}.so"; \
+                LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
+                if [ -f "${LIB_FILE}" ]; then \
+                    # 如果链接已存在，先删除再创建
+                    rm -f "${LINK_FILE}"; \
+                    ln -sf "aarch64-linux-gnu/lib${LIB}.so" "${LINK_FILE}"; \
+                    echo "✓ 创建/更新链接: lib${LIB}.so"; \
+                else \
+                    echo "⚠ 库文件不存在: ${LIB_FILE}"; \
+                    # 尝试在整个ROS目录中查找
+                    FOUND=$(find /opt/ros/humble -name "lib${LIB}.so*" -type f 2>/dev/null | head -1); \
+                    if [ -n "${FOUND}" ]; then \
+                        echo "  在以下位置找到: ${FOUND}"; \
+                        # 如果找到在其他位置，创建链接
+                        REL_PATH=$(realpath --relative-to="/opt/ros/humble/lib" "${FOUND}" 2>/dev/null || echo "${FOUND#/opt/ros/humble/lib/}"); \
+                        rm -f "${LINK_FILE}"; \
+                        ln -sf "${REL_PATH}" "${LINK_FILE}"; \
+                        echo "  创建链接到: ${REL_PATH}"; \
+                    fi; \
+                fi; \
+            done; \
+            # 验证所有关键库链接
+            echo "验证关键库链接:"; \
+            for LIB in builtin_interfaces__rosidl_generator_c; do \
+                LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
+                if [ -L "${LINK_FILE}" ] && [ -e "${LINK_FILE}" ]; then \
+                    echo "  ✓ ${LINK_FILE} -> $(readlink -f "${LINK_FILE}")"; \
+                elif [ -f "${LINK_FILE}" ]; then \
+                    echo "  ✓ ${LINK_FILE} (文件)"; \
+                else \
+                    echo "  ✗ ${LINK_FILE} 不存在或损坏"; \
+                fi; \
+            done; \
+        fi; \
+    fi
+
+# 构建unitree_ros2包
 RUN bash -c "set -exo pipefail; \
     source /opt/ros/humble/setup.bash; \
     # 确保库路径包含架构特定目录
@@ -350,12 +398,15 @@ RUN bash -c "set -exo pipefail; \
     fi; \
     # 验证关键库是否可访问
     if [ \"\$(uname -m)\" = \"aarch64\" ]; then \
-        echo \"验证库文件可访问性:\"; \
+        echo \"最终验证库文件可访问性:\"; \
         for lib in builtin_interfaces__rosidl_generator_c rosidl_typesupport_c rosidl_runtime_c; do \
             if [ -e \"/opt/ros/humble/lib/lib\${lib}.so\" ] || [ -L \"/opt/ros/humble/lib/lib\${lib}.so\" ]; then \
                 echo \"  ✓ lib\${lib}.so 可访问\"; \
+                ls -la \"/opt/ros/humble/lib/lib\${lib}.so\" || true; \
             else \
                 echo \"  ✗ lib\${lib}.so 不可访问\"; \
+                echo \"  搜索所有位置:\"; \
+                find /opt/ros/humble -name \"lib\${lib}.so*\" 2>/dev/null | head -3 || echo \"  未找到\"; \
             fi; \
         done; \
     fi; \
