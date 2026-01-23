@@ -239,16 +239,25 @@ RUN set -euxo pipefail; \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*;
 
-# Initialize agirosdep and install package dependencies
-RUN bash -c "set -exo pipefail; \
-    set +u; \
-    source /opt/agiros/${ROS_DISTRO}/setup.bash; \
-    set -u; \
-    agirosdep init 2>/dev/null || true; \
-    agirosdep update; \
-    agirosdep install --from-paths src --ignore-src -r -y \
-      --skip-keys 'cyclonedds rmw_cyclonedds_cpp' || \
-    (echo '⚠ agirosdep install failed or some packages unavailable, continuing...' && true)"
+# # Initialize agirosdep and install package dependencies
+# RUN bash -c "set -exo pipefail; \
+#     set +u; \
+#     source /opt/agiros/${ROS_DISTRO}/setup.bash; \
+#     set -u; \
+#     agirosdep init 2>/dev/null || true; \
+#     agirosdep update; \
+#     agirosdep install --from-paths src --ignore-src -r -y \
+#       --skip-keys 'cyclonedds rmw_cyclonedds_cpp' || \
+#     (echo '⚠ agirosdep install failed or some packages unavailable, continuing...' && true)"
+
+# 调试命令：检查 agirosdep 是否存在
+RUN set -euxo pipefail; \
+    echo "=== Checking agirosdep installation ==="; \
+    find /usr -name "*agirosdep*" 2>/dev/null || true; \
+    pip3 list | grep agirosdep || echo "agirosdep not in pip list"; \
+    ls -la /usr/local/bin/agirosdep* || echo "agirosdep not in /usr/local/bin"; \
+    echo "=== PATH content ==="; \
+    echo $PATH
 
 # Build unitree_ros2 packages
 RUN bash -c "source /opt/agiros/${ROS_DISTRO}/setup.bash && \
