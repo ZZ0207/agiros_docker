@@ -73,7 +73,7 @@ RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{s
 # 修复7：合并测试运行与环境变量设置
 RUN PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") && \
     export PYTHONPATH="/usr/lib64/python${PYTHON_VERSION}/site-packages:/usr/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH:-}" && \
-    python3 tests/test_gi.py
+    python3 /root/src/tests/test_gi.py
 
     
 WORKDIR /root/src
