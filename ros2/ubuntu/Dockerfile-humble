@@ -98,6 +98,7 @@ WORKDIR /root
 RUN set -euxo pipefail; \
     mkdir -p /root/src
 COPY src/ /root/src/
+COPY agiros/ /root/src/agiros/
 
 
 # Install RViz2 and Gazebo (may not be available on all architectures)
@@ -229,6 +230,17 @@ RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
 
 
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
+
+# 修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/setup.sh
+RUN set -euxo pipefail; \
+    if [ -f /root/src/agiros/agiros_cyclonedds_setup.sh ]; then \
+      cp /root/src/agiros/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh; \
+      chmod +x /root/src/unitree_ros2/setup.sh; \
+    else \
+      echo "✗ /root/src/agiros/agiros_cyclonedds_setup.sh not found"; \
+      ls -la /root/src/agiros/ || true; \
+      exit 1; \
+    fi
 
 # 安装所有 ROS 依赖（关键修复！必须在构建前执行）
 RUN bash -c "set -exo pipefail; \
