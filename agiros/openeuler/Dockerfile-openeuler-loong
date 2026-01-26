@@ -117,10 +117,15 @@ RUN set -euxo pipefail; \
     echo "✓ unitree_sdk2 submodule ready"
 
 WORKDIR /root/src/unitree_sdk2
-RUN mkdir build && \
+# 在构建 unitree_sdk2 之前，确保环境变量正确设置
+RUN bash -c "set -euxo pipefail; \
+    set +u; \
+    source /opt/agiros/${ROS_DISTRO}/setup.bash 2>/dev/null || true; \
+    set -u; \
+    mkdir -p build && \
     cd build && \
     cmake .. && \
-    make install
+    make install"
 # ===== Installing unitree_sdk2 =====
 
 # ==================== 构建unitree_ros2 ====================

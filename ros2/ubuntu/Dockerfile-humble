@@ -390,7 +390,13 @@ RUN set -euxo pipefail; \
 
 # 构建unitree_ros2包
 RUN bash -c "set -exo pipefail; \
+    set +u; \
     source /opt/ros/humble/setup.bash; \
+    # 如果 cyclonedds 已构建，source 其安装目录
+    if [ -f /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash ]; then \
+      source /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash; \
+    fi; \
+    set -u; \
     # 确保库路径包含架构特定目录
     if [ \"\$(uname -m)\" = \"aarch64\" ] && [ -d \"/opt/ros/humble/lib/aarch64-linux-gnu\" ]; then \
         export LD_LIBRARY_PATH=\"/opt/ros/humble/lib/aarch64-linux-gnu:\${LD_LIBRARY_PATH:-}\"; \
