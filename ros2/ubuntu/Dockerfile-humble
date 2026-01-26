@@ -389,6 +389,7 @@ RUN set -euxo pipefail; \
     fi
 
 # 构建unitree_ros2包
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "set -exo pipefail; \
     set +u; \
     source /opt/ros/humble/setup.bash; \

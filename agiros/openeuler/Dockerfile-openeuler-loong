@@ -189,7 +189,16 @@ RUN bash -c "set -exo pipefail; \
     (echo '⚠ agirosdep install failed, continuing...' && true)"
 
 # 修复8：合并构建步骤，避免重复编译cyclonedds（set +u 避免 SHELL -u 下 source setup.bash 未设变量报错）
-RUN bash -c "set +u; source /opt/agiros/${ROS_DISTRO}/setup.bash && colcon build"
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws
+RUN bash -c "set -exo pipefail; \
+    set +u; \
+    source /opt/agiros/${ROS_DISTRO}/setup.bash; \
+    if [ -f /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash ]; then \
+      source /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash; \
+    fi; \
+    set -u; \
+    pwd; \
+    colcon build"
 
 # ==================== 最终环境配置 ====================
 # 修复9：改用profile.d脚本，更标准且兼容多种shell

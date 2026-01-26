@@ -265,6 +265,7 @@ RUN bash -c "set -exo pipefail; \
 
 # Build unitree_ros2 packages
 # 需要先 source cyclonedds 的安装目录，然后 source AGIROS
+WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "set -exo pipefail; \
     set +u; \
     source /opt/agiros/${ROS_DISTRO}/setup.bash; \
