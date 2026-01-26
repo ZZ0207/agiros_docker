@@ -161,9 +161,30 @@ RUN set -euxo pipefail; \
       exit 1; \
     fi
 
-# 修复8：合并构建步骤，避免重复编译cyclonedds
-RUN source /opt/agiros/${ROS_DISTRO}/setup.bash && \
-    colcon build
+# 检查并安装 agirosdep，与 Ubuntu Dockerfile 一致
+RUN set -euxo pipefail; \
+    if ! command -v agirosdep &> /dev/null; then \
+      echo "agirosdep not found, installing explicitly..."; \
+      pip3 install --no-cache-dir --break-system-packages \
+        http://1.94.193.239/yumrepo/agiros/agirosdep/agirosdep-0.25.1-py3-none-any.whl; \
+    else \
+      echo "agirosdep is available at: $(which agirosdep)"; \
+    fi; \
+    which agirosdep
+
+# agirosdep 初始化并安装 unitree_ros2 依赖（跳过已构建的 cyclonedds）
+RUN bash -c "set -exo pipefail; \
+    set +u; \
+    source /opt/agiros/${ROS_DISTRO}/setup.bash; \
+    set -u; \
+    agirosdep init 2>/dev/null || true; \
+    agirosdep update; \
+    agirosdep install --from-paths /root/src/unitree_ros2/cyclonedds_ws/src --ignore-src -r -y \
+      --skip-keys 'cyclonedds rmw_cyclonedds_cpp' || \
+    (echo '⚠ agirosdep install failed, continuing...' && true)"
+
+# 修复8：合并构建步骤，避免重复编译cyclonedds（set +u 避免 SHELL -u 下 source setup.bash 未设变量报错）
+RUN bash -c "set +u; source /opt/agiros/${ROS_DISTRO}/setup.bash && colcon build"
 
 # ==================== 最终环境配置 ====================
 # 修复9：改用profile.d脚本，更标准且兼容多种shell
