@@ -241,6 +241,15 @@ RUN set -euxo pipefail; \
       exit 1; \
     fi
 
+# 修复 empy 包冲突问题（确保使用正确的 empy 版本）
+RUN set -euxo pipefail; \
+    echo "=== 修复 empy 包问题 ==="; \
+    pip3 uninstall -y em 2>/dev/null || true; \
+    pip3 install --no-cache-dir --force-reinstall empy==3.3.4 || \
+    pip3 install --no-cache-dir --force-reinstall empy; \
+    python3 -c "import em; print(f'✓ empy version: {em.__version__ if hasattr(em, \"__version__\") else \"unknown\"}')" || \
+    (echo "⚠ empy 验证失败，但继续..." && true)
+
 # 安装所有 ROS 依赖（关键修复！必须在构建前执行）
 RUN bash -c "set -exo pipefail; \
     set +u; \
@@ -418,7 +427,7 @@ RUN bash -c "set -exo pipefail; \
         done; \
     fi; \
     pwd; \
-    colcon build"
+    colcon build --executor sequential --symlink-install"
 # Double check whether the build was successful
 RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====

@@ -118,13 +118,13 @@ RUN set -euxo pipefail; \
 
 WORKDIR /root/src/unitree_sdk2
 # 在构建 unitree_sdk2 之前，确保环境变量正确设置
-RUN bash -c "set -euxo pipefail; \
+RUN bash -c "set -exo pipefail; \
     set +u; \
     source /opt/agiros/${ROS_DISTRO}/setup.bash 2>/dev/null || true; \
     set -u; \
     mkdir -p build && \
     cd build && \
-    cmake .. && \
+    cmake .. 2>&1 | tee /tmp/cmake.log || (cat /tmp/cmake.log && exit 1) && \
     make install"
 # ===== Installing unitree_sdk2 =====
 
@@ -168,6 +168,14 @@ RUN set -euxo pipefail; \
 
 # 检查并安装 agirosdep，与 Ubuntu Dockerfile 一致
 RUN set -euxo pipefail; \
+    # 修复 empy 包冲突问题（AGIROS 安装可能覆盖了 empy）
+    echo "=== 修复 empy 包问题 ==="; \
+    pip3 uninstall -y em 2>/dev/null || true; \
+    pip3 install --no-cache-dir --break-system-packages --force-reinstall empy==3.3.4 || \
+    pip3 install --no-cache-dir --break-system-packages --force-reinstall empy; \
+    python3 -c "import em; print(f'✓ empy version: {em.__version__ if hasattr(em, \"__version__\") else \"unknown\"}')" || \
+    (echo "⚠ empy 验证失败，但继续..." && true); \
+    # 检查 agirosdep 是否存在
     if ! command -v agirosdep &> /dev/null; then \
       echo "agirosdep not found, installing explicitly..."; \
       pip3 install --no-cache-dir --break-system-packages \
@@ -198,7 +206,7 @@ RUN bash -c "set -exo pipefail; \
     fi; \
     set -u; \
     pwd; \
-    colcon build"
+    colcon build --executor sequential --symlink-install"
 
 # ==================== 最终环境配置 ====================
 # 修复9：改用profile.d脚本，更标准且兼容多种shell
