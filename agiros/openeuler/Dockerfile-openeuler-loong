@@ -175,6 +175,10 @@ RUN set -euxo pipefail; \
     pip3 install --no-cache-dir --break-system-packages --force-reinstall empy; \
     python3 -c "import em; print(f'✓ empy version: {em.__version__ if hasattr(em, \"__version__\") else \"unknown\"}')" || \
     (echo "⚠ empy 验证失败，但继续..." && true); \
+    # 安装 agirosdep 的依赖 distro
+    echo "=== 安装 agirosdep 依赖 ==="; \
+    pip3 install --no-cache-dir --break-system-packages distro || \
+    (echo "⚠ distro 安装失败，尝试继续..." && true); \
     # 检查 agirosdep 是否存在
     if ! command -v agirosdep &> /dev/null; then \
       echo "agirosdep not found, installing explicitly..."; \
@@ -183,6 +187,9 @@ RUN set -euxo pipefail; \
     else \
       echo "agirosdep is available at: $(which agirosdep)"; \
     fi; \
+    # 验证 agirosdep 和 distro 是否可用
+    python3 -c "import distro; print(f'✓ distro version: {distro.__version__ if hasattr(distro, \"__version__\") else \"installed\"}')" || \
+    (echo "⚠ distro 验证失败，但继续..." && true); \
     which agirosdep
 
 # agirosdep 初始化并安装 unitree_ros2 依赖（跳过已构建的 cyclonedds）
@@ -191,7 +198,7 @@ RUN bash -c "set -exo pipefail; \
     source /opt/agiros/${ROS_DISTRO}/setup.bash; \
     set -u; \
     agirosdep init 2>/dev/null || true; \
-    agirosdep update; \
+    agirosdep update || (echo '⚠ agirosdep update failed, continuing...' && true); \
     agirosdep install --from-paths /root/src/unitree_ros2/cyclonedds_ws/src --ignore-src -r -y \
       --skip-keys 'cyclonedds rmw_cyclonedds_cpp' || \
     (echo '⚠ agirosdep install failed, continuing...' && true)"
