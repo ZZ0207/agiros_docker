@@ -241,14 +241,13 @@ RUN set -euxo pipefail; \
       exit 1; \
     fi
 
-# 修复 empy 包冲突问题（确保使用正确的 empy 版本）
+# 安装 empy：优先用 apt（python3-empy），避免 PyPI 网络/SSL 导致构建失败
 RUN set -euxo pipefail; \
-    echo "=== 修复 empy 包问题 ==="; \
+    echo "=== 安装 empy (优先 apt) ==="; \
     pip3 uninstall -y em 2>/dev/null || true; \
-    pip3 install --no-cache-dir --force-reinstall empy==3.3.4 || \
-    pip3 install --no-cache-dir --force-reinstall empy; \
-    python3 -c "import em; print(f'✓ empy version: {em.__version__ if hasattr(em, \"__version__\") else \"unknown\"}')" || \
-    (echo "⚠ empy 验证失败，但继续..." && true)
+    (apt-get update && apt-get install -y --no-install-recommends python3-empy && rm -rf /var/lib/apt/lists/*) || \
+    (pip3 install --no-cache-dir empy==3.3.4 || pip3 install --no-cache-dir empy || true); \
+    python3 -c "import em; print(f'✓ empy: {getattr(em, \"__version__\", \"ok\")}')" || (echo "✗ empy 不可用，后续 rosdep/colcon 可能失败" && exit 1)
 
 # 安装所有 ROS 依赖（关键修复！必须在构建前执行）
 RUN bash -c "set -exo pipefail; \

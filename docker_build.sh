@@ -242,7 +242,11 @@ retry_build() {
         echo ""
         echo "Build attempt $attempt of $max_attempts for $dockerfile_key..."
         
-        if build_image "$dockerfile_key" 2>&1 | tee "$log_file"; then
+        # Execute build and capture exit code correctly with pipe
+        build_image "$dockerfile_key" 2>&1 | tee "$log_file"
+        build_exit_code=${PIPESTATUS[0]}
+        
+        if [ $build_exit_code -eq 0 ]; then
             echo ""
             echo "✓ Build successful for $dockerfile_key!"
             rm -f "$log_file"
@@ -250,7 +254,7 @@ retry_build() {
         fi
         
         # Check if it's a network error
-        if grep -qE "(EOF|timeout|connection|network|short read|failed to fetch)" "$log_file"; then
+        if grep -qE "(EOF|timeout|connection|network|short read|failed to fetch|Connection timed out|unable to access)" "$log_file"; then
             if [ "$RETRY" = true ] && [ $attempt -lt $max_attempts ]; then
                 echo ""
                 echo "⚠ Network error detected. Waiting ${delay}s before retry..."

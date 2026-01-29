@@ -62,7 +62,7 @@ jobs:
   build-agiros-openeuler:
     name: Build AGIROS openEuler Image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_agiros_openeuler == true) ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
@@ -113,7 +113,7 @@ jobs:
   build-ros2-openeuler:
     name: Build ROS2 Humble openEuler Image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_ros2_openeuler == true) ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
@@ -164,7 +164,7 @@ jobs:
   build-agiros-ubuntu:
     name: Build AGIROS Ubuntu Image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_agiros_ubuntu == true) ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
@@ -215,7 +215,7 @@ jobs:
   build-ros2-foxy-ubuntu:
     name: Build ROS2 Foxy Ubuntu Image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_ros2_foxy_ubuntu == true) ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
@@ -266,7 +266,7 @@ jobs:
   build-ros2-humble-ubuntu:
     name: Build ROS2 Humble Ubuntu Image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_ros2_humble_ubuntu == true) ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
