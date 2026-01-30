@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     if: |
-      (github.event_name == 'workflow_dispatch' && inputs[matrix.input] == true) ||
+      (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
       (github.event_name == 'pull_request') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
@@ -121,14 +121,31 @@ jobs:
         with:
           submodules: recursive
 
+      # workflow_dispatch: only build this image if its input is true (matrix not available in job-level if)
+      - name: Check workflow_dispatch input
+        if: github.event_name == 'workflow_dispatch'
+        id: check_dispatch
+        run: |
+          case "${{ matrix.input }}" in
+            build_agiros_openeuler) val="${{ inputs.build_agiros_openeuler }}" ;;
+            build_ros2_openeuler) val="${{ inputs.build_ros2_openeuler }}" ;;
+            build_agiros_ubuntu) val="${{ inputs.build_agiros_ubuntu }}" ;;
+            build_ros2_foxy_ubuntu) val="${{ inputs.build_ros2_foxy_ubuntu }}" ;;
+            build_ros2_humble_ubuntu) val="${{ inputs.build_ros2_humble_ubuntu }}" ;;
+            *) val="false" ;;
+          esac
+          echo "should_build=$val" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
+        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Container Registry
-        if: github.event_name != 'pull_request'
+        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -136,6 +153,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Extract metadata
+        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -150,7 +168,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push multi-arch image
-        if: github.event_name != 'pull_request'
+        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -163,7 +181,7 @@ jobs:
           cache-to: ${{ matrix.cache_to }}
 
       - name: Build multi-arch image (PR, same repo)
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -176,7 +194,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.id }}
 
       - name: Build multi-arch image (PR, fork)
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
+        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
         uses: docker/build-push-action@v5
         with:
           context: .
