@@ -141,9 +141,100 @@ else
     echo "⚠ No .gitmodules file found, skipping submodule initialization"
 fi
 
-# Step 2: Ensure buildx builder exists and works
+# Step 2: Ensure binfmt is installed for cross-arch builds
 echo ""
-echo "Step 2: Setting up Docker Buildx..."
+echo "Step 2: Setting up binfmt for cross-arch builds..."
+setup_binfmt() {
+    local host_arch
+    host_arch="$(uname -m)"
+    local host_platform=""
+    case "$host_arch" in
+        x86_64) host_platform="linux/amd64" ;;
+        aarch64|arm64) host_platform="linux/arm64" ;;
+        armv7l) host_platform="linux/arm/v7" ;;
+        armv6l) host_platform="linux/arm/v6" ;;
+    esac
+    if [ -z "$host_platform" ]; then
+        echo "⚠ Warning: Unknown host architecture (${host_arch}); assuming cross-arch build"
+    fi
+
+    normalize_platform() {
+        local p="$1"
+        p="${p#linux/}"
+        echo "linux/$p"
+    }
+
+    arch_from_platform() {
+        local p="$1"
+        p="${p#linux/}"
+        p="${p%%/*}"
+        echo "$p"
+    }
+
+    local need_binfmt=false
+    local install_archs=()
+    local seen_archs=()
+    if [ -z "$PLATFORMS" ]; then
+        echo "⚠ Warning: PLATFORMS is empty; skipping binfmt setup"
+        return
+    fi
+    IFS=',' read -ra platform_items <<< "$PLATFORMS"
+    for raw_platform in "${platform_items[@]}"; do
+        local platform
+        platform="$(echo "$raw_platform" | xargs)"
+        if [ -z "$platform" ]; then
+            echo "⚠ Warning: Empty platform entry in PLATFORMS"
+            continue
+        fi
+        local normalized_platform
+        normalized_platform="$(normalize_platform "$platform")"
+        local normalized_host_platform="$host_platform"
+        if [ -n "$host_platform" ]; then
+            normalized_host_platform="$(normalize_platform "$host_platform")"
+        fi
+        local host_arch_key=""
+        if [ -n "$normalized_host_platform" ]; then
+            host_arch_key="$(arch_from_platform "$normalized_host_platform")"
+        fi
+        local platform_arch_key
+        platform_arch_key="$(arch_from_platform "$normalized_platform")"
+        if [ -n "$host_arch_key" ] && [ "$platform_arch_key" = "$host_arch_key" ]; then
+            if [ "$host_arch_key" != "arm" ] || [ "$normalized_platform" = "$normalized_host_platform" ]; then
+                continue
+            fi
+        fi
+        # Map linux/<arch> to <arch> for binfmt
+        local arch
+        arch="$(arch_from_platform "$normalized_platform")"
+        if [ -n "$arch" ]; then
+            need_binfmt=true
+            if [[ " ${seen_archs[*]} " != *" ${arch} "* ]]; then
+                install_archs+=("$arch")
+                seen_archs+=("$arch")
+            fi
+        fi
+    done
+
+    if [ "$need_binfmt" = true ]; then
+        local install_arg
+        install_arg="$(IFS=,; echo "${install_archs[*]}")"
+        echo "Installing/refreshing binfmt handlers (qemu) for: ${install_arg}"
+        if ! docker run --privileged --rm tonistiigi/binfmt --install "${install_arg}"; then
+            echo "⚠ Warning: Failed to install binfmt handlers."
+            echo "  Cross-arch builds may fail under emulation."
+            echo "  Try running: docker run --privileged --rm tonistiigi/binfmt --install ${install_arg}"
+        else
+            echo "✓ binfmt handlers installed"
+        fi
+    else
+        echo "✓ Host platform matches target; binfmt not required"
+    fi
+}
+setup_binfmt
+
+# Step 3: Ensure buildx builder exists and works
+echo ""
+echo "Step 3: Setting up Docker Buildx..."
 setup_buildx() {
     if ! docker buildx inspect multiarch &>/dev/null; then
         echo "Creating buildx builder 'multiarch'..."
@@ -174,7 +265,7 @@ setup_buildx() {
 }
 setup_buildx
 
-# Step 3: Build function with retry mechanism
+# Build helper function with retry mechanism
 build_image() {
     local dockerfile_key="$1"
     local dockerfile="${DOCKERFILES[$dockerfile_key]}"
@@ -286,9 +377,9 @@ retry_build() {
 echo "Cleaning buildx cache..."
 docker buildx prune -f || true
 
-# Step 3: Build images
+# Step 4: Build images
 echo ""
-echo "Step 3: Building Docker image(s)..."
+echo "Step 4: Building Docker image(s)..."
 
 # Determine which images to build
 declare -a build_targets
@@ -326,7 +417,7 @@ for target in "${build_targets[@]}"; do
     fi
 done
 
-# Step 4: Summary
+# Step 5: Summary
 echo ""
 echo "=========================================="
 echo "Build Summary"
