@@ -85,8 +85,9 @@ jobs:
             dockerfile: agiros/openeuler/Dockerfile-openeuler-loong
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker
             input: build_agiros_openeuler
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker:buildcache
-            cache_to: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker:buildcache,mode=max
+            # ACR 不支持 BuildKit registry cache 清单，改用 inline 将缓存写入镜像
+            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker:latest
+            cache_to: type=inline
           - id: ros2-openeuler
             name: ROS2 Humble openEuler Image
             dockerfile: ros2/openeuler/Dockerfile-openeuler-humble
@@ -99,8 +100,9 @@ jobs:
             dockerfile: agiros/ubuntu/Dockerfile-jammy
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu
             input: build_agiros_ubuntu
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu:buildcache
-            cache_to: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu:buildcache,mode=max
+            # ACR 不支持 BuildKit registry cache 清单，改用 inline 将缓存写入镜像
+            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu:latest
+            cache_to: type=inline
           - id: ros2-foxy-ubuntu
             name: ROS2 Foxy Ubuntu Image
             dockerfile: ros2/ubuntu/Dockerfile-foxy
