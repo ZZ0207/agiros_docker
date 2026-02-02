@@ -351,81 +351,82 @@ WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 # 构建前最后一次修复ARM64库路径（确保所有链接都已创建）
 # 根因：ROS aarch64 包可能在 /opt/ros/humble/lib/ 下安装自引用符号链接（libXXX.so -> libXXX.so），
 # 导致 CMake/ament 找不到库。此处强制删除损坏链接并指向 aarch64-linux-gnu/ 下的真实 .so
+# 第 28 步：构建前最终ARM64库路径修复（修复自引用链接问题）
 RUN set -euxo pipefail; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         echo "=== 构建前最终ARM64库路径修复 ==="; \
-        ARCH_LIB_DIR="/opt/ros/humble/lib/aarch64-linux-gnu"; \
-        if [ -d "${ARCH_LIB_DIR}" ]; then \
-            for LIB in builtin_interfaces__rosidl_generator_c \
-                       builtin_interfaces__rosidl_typesupport_c \
-                       builtin_interfaces__rosidl_typesupport_introspection_c \
-                       rosidl_typesupport_c \
-                       rosidl_runtime_c; do \
-                LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
-                REAL_IN_ARCH=$(find "${ARCH_LIB_DIR}" -maxdepth 1 -name "lib${LIB}.so*" -type f 2>/dev/null | head -1); \
-                if [ -z "${REAL_IN_ARCH}" ]; then \
-                    REAL_IN_ARCH=$(find "${ARCH_LIB_DIR}" -maxdepth 1 -name "lib${LIB}.so*" -type l 2>/dev/null | head -1); \
-                fi; \
-                if [ -n "${REAL_IN_ARCH}" ]; then \
-                    BASENAME=$(basename "${REAL_IN_ARCH}"); \
+        \
+        # 关键修复：删除所有自引用的损坏链接，并恢复为正确的文件或链接
+        for LIB in builtin_interfaces__rosidl_generator_c \
+                   builtin_interfaces__rosidl_typesupport_c \
+                   builtin_interfaces__rosidl_typesupport_introspection_c \
+                   rosidl_typesupport_c \
+                   rosidl_runtime_c; do \
+            LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
+            if [ -L "${LINK_FILE}" ]; then \
+                TARGET=$(readlink "${LINK_FILE}"); \
+                # 如果是自引用链接（指向自己）或指向不存在的文件，则删除
+                if [ "${TARGET}" = "lib${LIB}.so" ] || [ ! -e "${LINK_FILE}" ]; then \
+                    echo "删除损坏的自引用链接: ${LINK_FILE}"; \
                     rm -f "${LINK_FILE}"; \
-                    ln -sf "aarch64-linux-gnu/${BASENAME}" "${LINK_FILE}"; \
-                    echo "✓ 创建/更新链接: lib${LIB}.so -> aarch64-linux-gnu/${BASENAME}"; \
-                else \
-                    FOUND=$(find /opt/ros/humble -name "lib${LIB}.so*" -type f 2>/dev/null | head -1); \
-                    if [ -n "${FOUND}" ]; then \
-                        REL_PATH=$(realpath --relative-to="/opt/ros/humble/lib" "${FOUND}" 2>/dev/null || echo "${FOUND#/opt/ros/humble/lib/}"); \
-                        rm -f "${LINK_FILE}"; \
-                        ln -sf "${REL_PATH}" "${LINK_FILE}"; \
-                        echo "✓ 创建链接: lib${LIB}.so -> ${REL_PATH}"; \
-                    else \
-                        echo "⚠ 未找到 lib${LIB}.so*"; \
-                    fi; \
                 fi; \
-            done; \
-            echo "验证关键库链接:"; \
-            for LIB in builtin_interfaces__rosidl_generator_c rosidl_typesupport_c rosidl_runtime_c; do \
-                LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
-                if [ -e "${LINK_FILE}" ]; then \
-                    echo "  ✓ ${LINK_FILE} -> $(readlink -f "${LINK_FILE}" 2>/dev/null || readlink "${LINK_FILE}")"; \
+            fi; \
+        done; \
+        \
+        # 现在检查哪些库真正缺失，并从其他位置复制或链接
+        for LIB in builtin_interfaces__rosidl_generator_c \
+                   builtin_interfaces__rosidl_typesupport_c \
+                   builtin_interfaces__rosidl_typesupport_introspection_c \
+                   rosidl_typesupport_c \
+                   rosidl_runtime_c; do \
+            LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
+            if [ ! -e "${LINK_FILE}" ]; then \
+                # 搜索实际库文件位置
+                FOUND=$(find /opt/ros/humble -name "lib${LIB}.so" -type f 2>/dev/null | head -1); \
+                if [ -n "${FOUND}" ]; then \
+                    # 如果找到的是实际文件，直接复制到标准位置（避免链接问题）
+                    echo "复制库文件: ${FOUND} -> ${LINK_FILE}"; \
+                    cp -f "${FOUND}" "${LINK_FILE}"; \
                 else \
-                    echo "  ✗ ${LINK_FILE} 不存在或损坏"; \
+                    echo "⚠ 未找到 lib${LIB}.so"; \
                 fi; \
-            done; \
-        fi; \
+            else \
+                echo "✓ 库文件已存在: ${LINK_FILE}"; \
+            fi; \
+        done; \
+        \
+        echo "验证关键库文件:"; \
+        for LIB in builtin_interfaces__rosidl_generator_c rosidl_typesupport_c rosidl_runtime_c; do \
+            LINK_FILE="/opt/ros/humble/lib/lib${LIB}.so"; \
+            if [ -f "${LINK_FILE}" ] && [ ! -L "${LINK_FILE}" ]; then \
+                echo "  ✓ ${LINK_FILE} 是实际文件"; \
+            elif [ -L "${LINK_FILE}" ]; then \
+                echo "  → ${LINK_FILE} 是链接 -> $(readlink "${LINK_FILE}")"; \
+            else \
+                echo "  ✗ ${LINK_FILE} 不存在"; \
+            fi; \
+        done; \
     fi
 
-# 构建unitree_ros2包
+# 第 30 步：构建unitree_ros2包（简化版，不再重复修复链接）
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "set -exo pipefail; \
     set +u; \
     source /opt/ros/humble/setup.bash; \
-    # 如果 cyclonedds 已构建，source 其安装目录
     if [ -f /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash ]; then \
       source /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash; \
     fi; \
     set -u; \
-    # 确保库路径包含架构特定目录
-    if [ \"\$(uname -m)\" = \"aarch64\" ] && [ -d \"/opt/ros/humble/lib/aarch64-linux-gnu\" ]; then \
-        export LD_LIBRARY_PATH=\"/opt/ros/humble/lib/aarch64-linux-gnu:\${LD_LIBRARY_PATH:-}\"; \
-        echo \"设置LD_LIBRARY_PATH包含架构特定目录\"; \
-    fi; \
-    # 验证关键库是否可访问
+    \
+    # 设置环境变量（CMake 会通过这些变量查找库）
     if [ \"\$(uname -m)\" = \"aarch64\" ]; then \
-        echo \"最终验证库文件可访问性:\"; \
-        for lib in builtin_interfaces__rosidl_generator_c rosidl_typesupport_c rosidl_runtime_c; do \
-            if [ -e \"/opt/ros/humble/lib/lib\${lib}.so\" ] || [ -L \"/opt/ros/humble/lib/lib\${lib}.so\" ]; then \
-                echo \"  ✓ lib\${lib}.so 可访问\"; \
-                ls -la \"/opt/ros/humble/lib/lib\${lib}.so\" || true; \
-            else \
-                echo \"  ✗ lib\${lib}.so 不可访问\"; \
-                echo \"  搜索所有位置:\"; \
-                find /opt/ros/humble -name \"lib\${lib}.so*\" 2>/dev/null | head -3 || echo \"  未找到\"; \
-            fi; \
-        done; \
+        export LD_LIBRARY_PATH=\"/opt/ros/humble/lib:/opt/ros/humble/lib/aarch64-linux-gnu:\${LD_LIBRARY_PATH:-}\"; \
+        echo \"LD_LIBRARY_PATH: \${LD_LIBRARY_PATH}\"; \
     fi; \
+    \
     pwd; \
     colcon build --executor sequential --symlink-install"
+
 # Double check whether the build was successful
 RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====
@@ -436,14 +437,15 @@ WORKDIR /root/src
 # Ensure that docker_internal_setup.sh is executable
 RUN chmod +x /root/src/docker_internal_setup.sh && echo "source /root/src/docker_internal_setup.sh" >> /etc/bashrc
 
-ENV ROS_ROOT=${AGIROS_INSTALL_BASE} \
+# For ROS2 images, use /opt/ros/humble instead of AGIROS paths
+ENV ROS_ROOT=/opt/ros/${ROS_DISTRO} \
     ROS_DISTRO=${ROS_DISTRO} \
-    ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
+    ROS_INSTALL_BASE=/opt/ros/${ROS_DISTRO} \
     AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
-    AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
-    CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
-    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
-    PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}
+    AMENT_PREFIX_PATH=/opt/ros/${ROS_DISTRO} \
+    CMAKE_PREFIX_PATH=/opt/ros/${ROS_DISTRO} \
+    LD_LIBRARY_PATH=/opt/ros/${ROS_DISTRO}/lib:/opt/ros/${ROS_DISTRO}/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH} \
+    PATH=/opt/ros/${ROS_DISTRO}/bin:${PATH}
 
 # Set the entrypoint to start your application
 ENTRYPOINT ["./docker_internal_setup.sh"]

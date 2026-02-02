@@ -45,29 +45,37 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin 
 1.2 如果访问https://download.docker.com下载失败，替换国内源
 
 添加 Docker 的 GPG 密钥：
+
 ```bash
 curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
 ```
 
 更换为清华大学镜像源：
+
 ```bash
 sudo nano /etc/apt/sources.list.d/docker.list
 ```
+
 替换为以下内容：
 deb [arch=amd64] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/ubuntu focal stable
 保存并关闭文件。
+
 ```bash
 sudo apt-get update
 ```
+
 1.3 安装失败：
 方案一：使用国内镜像源安装
+
 1. 使用阿里云镜像安装 Docker
-bash
+   bash
 
 # 下载安装脚本
+
 curl -fsSL https://get.docker.com -o get-docker.sh
 
 # 使用阿里云镜像安装
+
 sudo sh get-docker.sh --mirror Aliyun
 或者使用中科大镜像
 bash
@@ -174,13 +182,15 @@ bash docker_build.sh --help                    # Show all options
 ```
 
 **Script Features**:
+
 - ✅ **Automatic submodule initialization**: Automatically runs `git submodule update --init --recursive`
 - ✅ **Retry mechanism**: Automatically retries on network errors (3 attempts with exponential backoff)
 - ✅ **Buildx management**: Automatically sets up and manages Docker Buildx builder
 - ✅ **Multi-arch support**: Builds for both amd64 and arm64 by default
 - ✅ **Push support**: Use `--push` flag to push to registry after build
 
-**Note**: This repository uses git submodules for `unitree_sdk2` and `unitree_ros2`. 
+**Note**: This repository uses git submodules for `unitree_sdk2` and `unitree_ros2`.
+
 - **CI/CD builds** (GitHub Actions/Gitee Go) automatically fetch submodules via `submodules: recursive` in checkout action.
 - **Local builds**: The `docker_build.sh` script automatically initializes submodules before building.
 
@@ -191,6 +201,7 @@ Pull the Docker image from Docker Hub: TODO.
 #### Buildx GPU Runtime Error
 
 If you encounter the error:
+
 ```
 ERROR: Error response from daemon: could not select device driver "" with capabilities: [[gpu]]
 ```
@@ -202,6 +213,7 @@ sudo bash fix_docker_runtime.sh
 ```
 
 This script will:
+
 - Backup your current Docker daemon configuration
 - Change default runtime from `nvidia` to `runc`
 - Restart Docker service
@@ -220,6 +232,7 @@ This repository includes CI/CD pipeline configurations for automatic Docker imag
   - ROS2 Humble openEuler image (multi-arch: amd64/arm64)
 
 **Setup Instructions**:
+
 1. Go to your GitHub repository → Settings → Secrets and variables → Actions
 2. Add repository secrets:
    - `DOCKER_USERNAME`: Your container registry username
@@ -227,6 +240,7 @@ This repository includes CI/CD pipeline configurations for automatic Docker imag
 3. The workflow will automatically build and push images on push/PR events
 
 **Features**:
+
 - Automatic multi-arch builds (amd64/arm64)
 - Build cache for faster subsequent builds
 - Automatic tagging with branch name, commit SHA, and semantic versioning
@@ -241,6 +255,7 @@ This repository includes CI/CD pipeline configurations for automatic Docker imag
   - ROS2 Humble openEuler image (multi-arch: amd64/arm64)
 
 **Setup Instructions**:
+
 1. Go to your Gitee repository → Settings → Gitee Go
 2. Enable Gitee Go and configure the pipeline
 3. Add environment variables:
@@ -275,4 +290,3 @@ docker buildx build \
   -f ros2/openeuler/Dockerfile-openeuler-humble \
   .
 ```
-
