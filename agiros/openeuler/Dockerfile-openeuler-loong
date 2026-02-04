@@ -192,6 +192,29 @@ RUN set -euxo pipefail; \
     (echo "⚠ distro 验证失败，但继续..." && true); \
     which agirosdep
 
+# 显式安装 travodds 相关包（确保 unitree_ros2 构建所需依赖完整）
+RUN set -euxo pipefail; \
+    dnf -y install --setopt=install_weak_deps=0 \
+      agiros-${ROS_DISTRO}-travodds \
+      agiros-${ROS_DISTRO}-travodds-devel \
+      agiros-${ROS_DISTRO}-travodds-cmake-module \
+      agiros-${ROS_DISTRO}-travodds-autogen \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-cpp \
+      agiros-${ROS_DISTRO}-rmw-travodds-cpp \
+      agiros-${ROS_DISTRO}-rosidl-generator-dds-idl \
+      agiros-${ROS_DISTRO}-rosidl-generator-c \
+      agiros-${ROS_DISTRO}-rosidl-generator-cpp \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-cpp \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-cpp \
+      agiros-${ROS_DISTRO}-builtin-interfaces 2>/dev/null || \
+    (echo "⚠ 某些 travodds 包安装失败，尝试继续..." && true); \
+    dnf clean all && rm -rf /var/cache/dnf; \
+    echo "=== 检查 travodds 包 ==="; \
+    rpm -qa | grep -i travodds || echo "⚠ travodds 包仍不可用"
+
 # agirosdep 初始化并安装 unitree_ros2 依赖（跳过已构建的 cyclonedds）
 RUN bash -c "set -exo pipefail; \
     set +u; \
@@ -203,7 +226,8 @@ RUN bash -c "set -exo pipefail; \
       --skip-keys 'cyclonedds rmw_cyclonedds_cpp' || \
     (echo '⚠ agirosdep install failed, continuing...' && true)"
 
-# 修复8：合并构建步骤，避免重复编译cyclonedds（set +u 避免 SHELL -u 下 source setup.bash 未设变量报错）
+# 修复：合并构建步骤，避免重复编译cyclonedds（set +u 避免 SHELL -u 下 source setup.bash 未设变量报错）
+# 添加详细错误输出以调试构建问题
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "set -exo pipefail; \
     set +u; \
@@ -213,7 +237,9 @@ RUN bash -c "set -exo pipefail; \
     fi; \
     set -u; \
     pwd; \
-    colcon build --executor sequential --symlink-install"
+    echo '=== 开始构建 unitree_ros2 ==='; \
+    colcon build --executor sequential --symlink-install 2>&1 | tee /tmp/colcon_build.log || \
+    (echo '✗ colcon build 失败，查看日志:' && cat /tmp/colcon_build.log && exit 1)"
 
 # ==================== 最终环境配置 ====================
 # 修复9：改用profile.d脚本，更标准且兼容多种shell

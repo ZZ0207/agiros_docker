@@ -313,7 +313,9 @@ RUN bash -c "set -exo pipefail; \
     fi; \
     set -u; \
     pwd; \
-    colcon build --executor sequential --symlink-install"
+    echo '=== 开始构建 unitree_ros2 ==='; \
+    colcon build --executor sequential --symlink-install 2>&1 | tee /tmp/colcon_build.log || \
+    (echo '✗ colcon build 失败，查看日志:' && cat /tmp/colcon_build.log && exit 1)"
 # Double check whether the build was successful
 RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
 # ===== Installing unitree_ros2 =====
