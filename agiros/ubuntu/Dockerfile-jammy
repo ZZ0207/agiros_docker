@@ -102,6 +102,9 @@ RUN set -euxo pipefail; \
     printf "2\n" | bash ./install.sh > /tmp/install.log 2>&1; \
     INSTALL_EXIT=$?; \
     set -e; \
+    echo "=== AGIROS Installation Log (exit code: $INSTALL_EXIT) ==="; \
+    cat /tmp/install.log; \
+    echo "=== End of AGIROS Installation Log ==="; \
     if [ $INSTALL_EXIT -ne 0 ]; then \
       if grep -q "Can't adjust the time of day: Operation not permitted" /tmp/install.log; then \
         echo "⚠ ntpdate error detected (non-fatal in containers), checking if AGIROS was installed..."; \
@@ -109,16 +112,28 @@ RUN set -euxo pipefail; \
           echo "✓ AGIROS appears to be installed despite ntpdate error"; \
         else \
           echo "✗ AGIROS installation failed"; \
-          cat /tmp/install.log; \
           exit 1; \
         fi; \
       else \
         echo "✗ AGIROS installation failed with exit code $INSTALL_EXIT"; \
-        cat /tmp/install.log; \
         exit 1; \
       fi; \
     fi; \
-    rm -f install.sh /tmp/install.log
+    rm -f install.sh; \
+    # 保留安装日志到镜像中以便后续检查
+    cp /tmp/install.log /var/log/agiros_install.log
+
+# 验证 travodds 包安装情况（用于排查构建问题）
+RUN set -euxo pipefail; \
+    echo "=== 检查 travodds 相关包安装情况 ==="; \
+    dpkg -l | grep -i travodds || echo "⚠ 没有找到 travodds 相关包"; \
+    echo ""; \
+    echo "=== 检查 travodds CMake 配置文件 ==="; \
+    find /opt/agiros/${ROS_DISTRO} -name "*travodds*" -type f 2>/dev/null | head -20 || echo "⚠ 没有找到 travodds 文件"; \
+    echo ""; \
+    echo "=== 检查已安装的 agiros 包 ==="; \
+    dpkg -l | grep agiros | wc -l; \
+    echo "个 agiros 包已安装"
 
 # ===== GStreamer =====
 RUN set -euxo pipefail; \
@@ -269,6 +284,23 @@ RUN bash -c "set -exo pipefail; \
       --skip-keys 'cyclonedds rmw_cyclonedds_cpp' || \
     (echo '⚠ agirosdep install failed, continuing...' && true)"
 
+
+# 显式安装 travodds 相关包（确保 unitree_ros2 构建所需依赖完整）
+RUN set -euxo pipefail; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      agiros-${ROS_DISTRO}-travodds \
+      agiros-${ROS_DISTRO}-travodds-dev \
+      agiros-${ROS_DISTRO}-travodds-cmake-module \
+      agiros-${ROS_DISTRO}-travodds-autogen \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-cpp \
+      agiros-${ROS_DISTRO}-rmw-travodds-cpp || \
+    (echo "⚠ 某些 travodds 包安装失败，尝试继续..." && true); \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*; \
+    echo "=== 再次检查 travodds 包 ==="; \
+    dpkg -l | grep -i travodds || echo "⚠ travodds 包仍不可用"
 
 # Build unitree_ros2 packages
 # 需要先 source cyclonedds 的安装目录，然后 source AGIROS
