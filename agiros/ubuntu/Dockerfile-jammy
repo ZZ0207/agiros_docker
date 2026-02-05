@@ -16,6 +16,12 @@ ARG ROS_DISTRO=loong
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 ARG AGIROS_INSTALL_URL=http://1.94.193.239/debrepo/agiros/ubuntu2204lts/2512/install.sh
 
+ENV CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE}
+ENV AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE}
+ENV ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
+ENV LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64:${LD_LIBRARY_PATH:-}
+ENV PATH=${AGIROS_INSTALL_BASE}/bin:${PATH}
+
 # docker buildx will set this automatically (amd64/arm64)
 ARG TARGETARCH
 
@@ -290,7 +296,7 @@ RUN set -euxo pipefail; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       agiros-${ROS_DISTRO}-travodds \
-      agiros-${ROS_DISTRO}-travodds-devel \
+      agiros-${ROS_DISTRO}-travodds-dev \
       agiros-${ROS_DISTRO}-travodds-cmake-module \
       agiros-${ROS_DISTRO}-travodds-autogen \
       agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-c \

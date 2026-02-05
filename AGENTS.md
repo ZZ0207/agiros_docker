@@ -1,44 +1,97 @@
 # AGENTS.md - Unitree Go2 Docker Project
 
-> 本文件为 AI Coding Agent 提供项目背景、构建流程和开发规范指引。
+> This file provides AI coding agents with project background, architecture details, build processes, and development conventions for the Unitree Go2 Docker project.
 
 ---
 
-## 项目概述
+## Project Overview
 
-本项目是用于 **Unitree Go2 四足机器狗** 开发的 Docker 镜像仓库，提供了预配置好的 ROS2/AGIROS 开发环境，支持多架构（amd64/arm64）构建。
+This project provides **Docker-based development environments** for the **Unitree Go2 quadruped robot**. It supports multiple operating systems (Ubuntu, openEuler), multiple ROS distributions (AGIROS, ROS2 Foxy/Humble), and multi-architecture builds (AMD64/ARM64).
 
-### 主要功能
+### Key Capabilities
 
-- 提供多种基础镜像：AGIROS (Ubuntu/openEuler) 和 ROS2 Foxy/Humble (Ubuntu/openEuler)
-- 集成 Unitree SDK2 和 Unitree ROS2 接口
-- 支持 CycloneDDS 中间件配置
-- 多架构支持（x86_64 和 ARM64）
+- **Multi-OS Support**: Ubuntu 20.04/22.04 and openEuler 24.03 LTS
+- **Multi-ROS Support**: AGIROS (国产机器人操作系统), ROS2 Foxy, ROS2 Humble
+- **Multi-Architecture**: x86_64 (amd64) and ARM64 (aarch64)
+- **Pre-configured Networking**: CycloneDDS with automatic network interface detection
+- **Complete Toolchain**: Includes Unitree SDK2, Unitree ROS2, GStreamer, PyGObject
 
 ---
 
-## 技术栈
+## Technology Stack
 
-### 核心技术
+### Core Technologies
 
+| Component | Description | Version/Details |
+|-----------|-------------|-----------------|
+| **Docker & Buildx** | Containerization and cross-platform builds | Multi-arch support via QEMU |
+| **AGIROS** | Chinese ROS2 distribution (基于 ROS2) | loong distribution |
+| **ROS2 Foxy** | Ubuntu 20.04 based ROS2 | For older compatibility |
+| **ROS2 Humble** | Ubuntu 22.04 LTS based ROS2 | Long-term support |
+| **openEuler 24.03 LTS** | Chinese open-source OS | Enterprise-grade |
+| **CycloneDDS** | DDS middleware implementation | For robot communication |
+| **Unitree SDK2** | Official Unitree robot SDK | Git submodule |
+| **Unitree ROS2** | ROS2 interface for Unitree robots | Git submodule |
 
-| 组件                       | 说明                            |
-| -------------------------- | ------------------------------- |
-| **Docker & Docker Buildx** | 容器化与跨架构构建              |
-| **ROS2 Foxy/Humble**       | 机器人操作系统                  |
-| **AGIROS**                 | 国产机器人操作系统（基于 ROS2） |
-| **CycloneDDS**             | DDS 中间件实现                  |
-| **openEuler 24.03 LTS**    | 国产开源操作系统                |
-| **Ubuntu 20.04/22.04**     | 基础镜像（Jammy/Focal）         |
+### Build Dependencies
 
-### 依赖的 Git 子模块
+- Docker Engine (NOT Docker Desktop)
+- Docker Buildx for multi-arch builds
+- QEMU for cross-architecture emulation
+- Git with submodule support
+
+---
+
+## Project Structure
 
 ```
-src/unitree_sdk2   -> https://github.com/unitreerobotics/unitree_sdk2
-src/unitree_ros2   -> https://github.com/unitreerobotics/unitree_ros2
+.
+├── agiros/                          # AGIROS Dockerfile configurations
+│   ├── openeuler/
+│   │   └── Dockerfile-openeuler-loong   # openEuler 24.03 + AGIROS loong
+│   └── ubuntu/
+│       └── Dockerfile-jammy             # Ubuntu 22.04 + AGIROS loong
+│
+├── ros2/                            # ROS2 Dockerfile configurations
+│   ├── openeuler/
+│   │   └── Dockerfile-openeuler-humble  # openEuler 24.03 + ROS2 Humble
+│   └── ubuntu/
+│       ├── Dockerfile-foxy              # Ubuntu 20.04 + ROS2 Foxy
+│       └── Dockerfile-humble            # Ubuntu 22.04 + ROS2 Humble
+│
+├── ros1&ros2/                       # Experimental ROS1+ROS2 bridge images
+│
+├── src/                             # Build source files and scripts
+│   ├── tests/
+│   │   └── test_gi.py               # PyGObject/GStreamer validation test
+│   ├── agiros_cyclonedds_setup.sh   # AGIROS CycloneDDS environment setup
+│   ├── ros_cyclonedds_setup.sh      # ROS2 CycloneDDS environment setup
+│   ├── go2_ros2_setup.sh            # Go2-specific ROS2 network setup
+│   └── docker_internal_setup.sh     # Container initialization entrypoint
+│
+├── .github/workflows/               # GitHub Actions CI/CD
+│   └── docker-build.yml             # Multi-arch Docker build pipeline
+│
+├── .gitee/pipelines/                # Gitee Go CI/CD
+│   └── docker-build.yml             # Gitee build pipeline
+│
+├── docker_build.sh                  # Main build script (recommended)
+├── docker-compose.yml               # Docker Compose configuration
+├── docker_run.sh                    # Quick container launch script
+├── README.md                        # User documentation (mainly in Chinese)
+└── TROUBLESHOOTING.md               # Network error fixes and debugging
 ```
 
-**重要**: 构建前必须初始化子模块：
+### Git Submodules
+
+The project depends on two external repositories:
+
+```
+src/unitree_sdk2   → https://github.com/unitreerobotics/unitree_sdk2
+src/unitree_ros2   → https://github.com/unitreerobotics/unitree_ros2
+```
+
+**IMPORTANT**: Always initialize submodules before building:
 
 ```bash
 git submodule update --init --recursive
@@ -46,89 +99,56 @@ git submodule update --init --recursive
 
 ---
 
-## 项目结构
+## Build System
 
-```
-.
-├── agiros/                          # AGIROS 相关 Dockerfile
-│   ├── openeuler/
-│   │   └── Dockerfile-openeuler-loong   # openEuler + AGIROS
-│   └── ubuntu/
-│       └── Dockerfile-jammy             # Ubuntu 22.04 + AGIROS
-├── ros2/                            # ROS2 相关 Dockerfile
-│   ├── openeuler/
-│   │   └── Dockerfile-openeuler-humble  # openEuler + ROS2 Humble
-│   └── ubuntu/
-│       ├── Dockerfile-foxy              # Ubuntu 20.04 + ROS2 Foxy
-│       └── Dockerfile-humble            # Ubuntu 22.04 + ROS2 Humble
-├── ros1&ros2/                       # ROS1+ROS2 桥接实验性镜像
-├── src/                             # 构建源文件和脚本
-│   ├── tests/
-│   │   └── test_gi.py               # PyGObject/GStreamer 测试
-│   ├── agiros_cyclonedds_setup.sh   # AGIROS CycloneDDS 环境配置
-│   ├── ros_cyclonedds_setup.sh      # ROS2 CycloneDDS 环境配置
-│   ├── go2_ros2_setup.sh            # Go2 ROS2 环境配置脚本
-│   └── docker_internal_setup.sh     # 容器内部初始化脚本
-├── docker_build.sh                  # 主构建脚本
-├── docker-compose.yml               # Docker Compose 配置
-├── docker_run.sh                    # 快速运行脚本
-├── TROUBLESHOOTING.md               # 故障排除指南
-└── .github/workflows/               # GitHub Actions CI/CD
-    └── docker-build.yml
-```
+### Available Docker Images
 
----
+| Image Key | Dockerfile Path | Description |
+|-----------|-----------------|-------------|
+| `agiros-openeuler` | `agiros/openeuler/Dockerfile-openeuler-loong` | AGIROS on openEuler 24.03 |
+| `agiros-ubuntu` | `agiros/ubuntu/Dockerfile-jammy` | AGIROS on Ubuntu 22.04 |
+| `ros2-openeuler` | `ros2/openeuler/Dockerfile-openeuler-humble` | ROS2 Humble on openEuler |
+| `ros2-foxy-ubuntu` | `ros2/ubuntu/Dockerfile-foxy` | ROS2 Foxy on Ubuntu 20.04 |
+| `ros2-humble-ubuntu` | `ros2/ubuntu/Dockerfile-humble` | ROS2 Humble on Ubuntu 22.04 |
 
-## 构建命令
+### Build Commands
 
-### 使用 docker_build.sh（推荐）
+#### Using docker_build.sh (Recommended)
 
 ```bash
-# 构建所有镜像
+# Build all images (default)
 bash docker_build.sh
 
-# 构建特定镜像
-bash docker_build.sh --build agiros-openeuler
-bash docker_build.sh --build ros2-humble-ubuntu
+# Build specific image
+bash docker_build.sh --build agiros-ubuntu
 
-# 查看可构建的镜像列表
-bash docker_build.sh --list
-
-# 构建并推送到镜像仓库
+# Build and push to registry
 bash docker_build.sh --all --push
 
-# 单平台构建（本地测试）
+# Build for single platform
 bash docker_build.sh --build agiros-ubuntu --platform linux/amd64
 
-# 禁用网络错误重试
+# Disable network error retry
 bash docker_build.sh --no-retry
+
+# List available images
+bash docker_build.sh --list
 ```
 
-### 可用镜像名称
-
-
-| 镜像名称             | Dockerfile 路径                               |
-| -------------------- | --------------------------------------------- |
-| `agiros-openeuler`   | `agiros/openeuler/Dockerfile-openeuler-loong` |
-| `agiros-ubuntu`      | `agiros/ubuntu/Dockerfile-jammy`              |
-| `ros2-openeuler`     | `ros2/openeuler/Dockerfile-openeuler-humble`  |
-| `ros2-foxy-ubuntu`   | `ros2/ubuntu/Dockerfile-foxy`                 |
-| `ros2-humble-ubuntu` | `ros2/ubuntu/Dockerfile-humble`               |
-
-### 手动使用 Docker Buildx
+#### Manual Docker Buildx
 
 ```bash
-# 创建 buildx 构建器
+# Create multi-arch builder
 docker buildx create --name multiarch --driver docker-container --use
 
-# 构建多架构镜像
+# Build multi-arch image
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t unitree-go2:agiros-openeuler \
   -f agiros/openeuler/Dockerfile-openeuler-loong \
   --push .
 
-# 本地单架构加载（--load 仅支持单平台）
+# Local single-arch build (with --load)
 docker buildx build \
   --platform linux/amd64 \
   -t unitree-go2:test \
@@ -136,54 +156,45 @@ docker buildx build \
   --load .
 ```
 
----
+### Build Script Features
 
-## 运行容器
-
-### 使用 docker-compose
-
-```bash
-# 启动容器
-docker compose up -d
-
-# 进入容器交互模式
-docker compose run --rm go2 bash
-```
-
-### 使用 docker_run.sh（快速方式）
-
-```bash
-bash docker_run.sh
-```
-
-### 手动运行
-
-```bash
-docker run -it --rm \
-  --privileged \
-  --network host \
-  --ipc host \
-  -e NVIDIA_VISIBLE_DEVICES=all \
-  -e GO2_NETWORK_INTERFACE=enp118s0 \
-  -v ./src:/app/src \
-  unitree-go2-docker:latest bash
-```
+- ✅ **Automatic submodule initialization**: Runs `git submodule update --init --recursive`
+- ✅ **Retry mechanism**: 3 attempts with exponential backoff for network errors
+- ✅ **Automatic binfmt setup**: Configures QEMU for cross-arch builds
+- ✅ **Buildx management**: Creates/manages `multiarch` builder automatically
+- ✅ **Registry push support**: `--push` flag for CI/CD integration
 
 ---
 
-## 代码风格与开发规范
+## Dockerfile Conventions
 
-### Dockerfile 规范
+### Shell Configuration
 
-1. **使用 `SHELL ["/bin/bash", "-c"]`** 确保支持管道和重定向
-2. **使用 `set -euxo pipefail`** 在 RUN 指令中启用严格模式
-3. **多行命令使用 `&&` 连接** 减少层数
-4. **清理缓存** 每个 RUN 末尾清理 apt/dnf 缓存
-5. **使用 `--no-install-recommends`** 最小化镜像体积
+All Dockerfiles use bash with strict error handling:
 
-### 子模块处理规范
+```dockerfile
+# Ubuntu
+SHELL ["/bin/bash", "-c"]
 
-所有 Dockerfile 必须包含子模块自动初始化逻辑：
+# openEuler (more strict)
+SHELL ["/bin/bash", "-e", "-u", "-o", "pipefail", "-c"]
+```
+
+### RUN Instruction Best Practices
+
+```dockerfile
+# Use set -euxo pipefail for strict mode
+RUN set -euxo pipefail; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      package1 package2 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+```
+
+### Submodule Handling Pattern
+
+Every Dockerfile must include this pattern for resilient submodule handling:
 
 ```dockerfile
 RUN set -euxo pipefail; \
@@ -202,211 +213,312 @@ RUN set -euxo pipefail; \
     fi
 ```
 
-### ARM64 特殊处理
+### ARM64 Library Path Fixes
 
-Ubuntu ROS2 镜像需要特殊的 ARM64 库路径修复：
+Ubuntu ROS2 images need special ARM64 handling:
 
 ```dockerfile
-# 修复 ROS aarch64 包库路径问题
+# Fix ROS aarch64 package library path issues
 RUN set -euxo pipefail; \
     if [ "$(uname -m)" = "aarch64" ]; then \
         ARCH_LIB_DIR="/opt/ros/humble/lib/aarch64-linux-gnu"; \
-        # 创建符号链接修复库路径
-        ln -sf "aarch64-linux-gnu/libXXX.so" "/opt/ros/humble/lib/libXXX.so"; \
+        # Create symlinks to fix library paths
+        find "${ARCH_LIB_DIR}" -maxdepth 1 -name "*.so" -type f | while read -r lib; do \
+            lib_name=$(basename "$lib"); \
+            target="/opt/ros/humble/lib/$lib_name"; \
+            if [ ! -e "$target" ]; then \
+                ln -sf "aarch64-linux-gnu/$lib_name" "$target"; \
+            fi; \
+        done; \
     fi
 ```
 
 ---
 
-## 测试策略
+## Runtime Configuration
 
-### 自动化测试
+### Container Environment Variables
 
-项目包含简单的 Python 测试文件：
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `GO2_NETWORK_INTERFACE` | Network interface for robot communication | `enp118s0` |
+| `CYCLONEDDS_URI` | DDS configuration (auto-generated) | XML format |
+| `RMW_IMPLEMENTATION` | RMW implementation | `rmw_cyclonedds_cpp` |
+| `ROS_DISTRO` | ROS distribution | `humble`, `foxy`, `loong` |
 
-```bash
-# 测试 PyGObject/GStreamer 安装
-python3 src/tests/test_gi.py
-```
+### CycloneDDS Configuration
 
-该测试验证：
-
-- `gi` 模块可导入
-- GStreamer 1.0 可用
-- 可获取 GStreamer 版本信息
-
-### 手动测试建议
-
-1. **ROS2 通信测试**:
-
-   ```bash
-   # 终端 1
-   ros2 run demo_nodes_cpp talker
-
-   # 终端 2
-   ros2 run demo_nodes_cpp listener
-   ```
-2. **CycloneDDS 配置验证**:
-
-   ```bash
-   # 检查 RMW 实现
-   echo $RMW_IMPLEMENTATION  # 应输出 rmw_cyclonedds_cpp
-
-   # 检查网络接口配置
-   echo $CYCLONEDDS_URI
-   ```
-
----
-
-## CI/CD 配置
-
-### GitHub Actions
-
-**配置文件**: `.github/workflows/docker-build.yml`
-
-**触发条件**:
-
-- Push 到 master/main/dev 分支
-- Tag 推送（v* 格式）
-- Pull Request
-- 手动触发（workflow_dispatch）
-
-**构建矩阵**:
-
-- AGIROS openEuler (linux/amd64, linux/arm64)
-- ROS2 Humble openEuler (linux/amd64, linux/arm64)
-- AGIROS Ubuntu (linux/amd64, linux/arm64)
-- ROS2 Foxy Ubuntu (linux/amd64, linux/arm64)
-- ROS2 Humble Ubuntu (linux/amd64, linux/arm64)
-
-**所需 Secrets**:
-
-- `DOCKER_USERNAME`: 镜像仓库用户名
-- `DOCKER_PASSWORD`: 镜像仓库密码
-
-### Gitee Go
-
-**配置文件**: `.gitee/pipelines/docker-build.yml`
-
-功能与 GitHub Actions 类似，支持在 Gitee 平台进行镜像构建。
-
----
-
-## 故障排除
-
-### 常见构建错误
-
-#### 1. 网络错误（`short read: expected X bytes`）
-
-**原因**: 基础镜像下载中断
-
-**解决**:
+The `go2_ros2_setup.sh` script configures CycloneDDS for Go2 communication:
 
 ```bash
-# 清理缓存并重试
-docker buildx prune -f
-bash docker_build.sh
-```
-
-#### 2. GPU Runtime 错误
-
-**错误信息**:
-
-```
-ERROR: could not select device driver "" with capabilities: [[gpu]]
-```
-
-**解决**:
-
-```bash
-sudo bash fix_docker_runtime.sh
-```
-
-#### 3. 子模块缺失
-
-**错误信息**: `unitree_sdk2/CMakeLists.txt not found`
-
-**解决**:
-
-```bash
-git submodule update --init --recursive
-```
-
-#### 4. ntpdate 权限错误（容器内）
-
-**说明**: ntpdate 在容器中可能因权限问题失败，但通常不影响 AGIROS 安装
-
-**解决**: Dockerfile 已处理此情况，继续后续步骤
-
-### 调试技巧
-
-1. **查看构建日志**:
-
-   ```bash
-   docker buildx build --progress=plain ... 2>&1 | tee build.log
-   ```
-2. **进入失败的构建阶段**:
-
-   ```bash
-   # 使用 --target 构建到特定阶段
-   docker buildx build --target <stage_name> ...
-   ```
-
----
-
-## 安全注意事项
-
-1. **容器以 privileged 模式运行** - 需要访问主机网络和设备
-2. **网络模式为 host** - 用于与机器人直接通信
-3. **镜像仓库凭证** - 通过 GitHub/Gitee Secrets 管理
-4. **子模块来源** - 依赖外部 GitHub 仓库，构建时自动克隆
-
----
-
-## 网络配置
-
-### 关键环境变量
-
-
-| 变量                    | 说明                 | 示例                 |
-| ----------------------- | -------------------- | -------------------- |
-| `GO2_NETWORK_INTERFACE` | 机器人通信网卡       | `enp118s0`           |
-| `CYCLONEDDS_URI`        | DDS 配置（自动生成） | XML 格式             |
-| `RMW_IMPLEMENTATION`    | RMW 实现             | `rmw_cyclonedds_cpp` |
-
-### CycloneDDS 配置
-
-通过脚本自动配置：
-
-```bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="<CycloneDDS><Domain><General><Interfaces>
   <NetworkInterface name=\"${GO2_NETWORK_INTERFACE}\" priority=\"default\" multicast=\"default\" />
 </Interfaces></General></Domain></CycloneDDS>"
 ```
 
+### Docker Compose Configuration
+
+```yaml
+services:
+  go2:
+    image: unitree-go2-docker:latest
+    privileged: true        # Required for device access
+    network_mode: "host"    # Required for DDS multicast
+    ipc: "host"             # Required for shared memory
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - GO2_NETWORK_INTERFACE=enp118s0
+    volumes:
+      - ./src:/app/src
+```
+
+**Note**: `privileged`, `network_mode: host`, and `ipc: host` are required for proper robot communication.
+
 ---
 
-## 镜像仓库
+## CI/CD Configuration
 
-**默认仓库**: 阿里云容器镜像服务（ACR）
+### GitHub Actions
+
+**File**: `.github/workflows/docker-build.yml`
+
+**Triggers**:
+- Push to `master`, `main`, `dev` branches
+- Tags starting with `v*`
+- Pull requests
+- Manual trigger (workflow_dispatch)
+
+**Build Matrix**:
+- AGIROS openEuler (linux/amd64, linux/arm64)
+- AGIROS Ubuntu (linux/amd64, linux/arm64)
+- ROS2 Humble openEuler (linux/amd64, linux/arm64)
+- ROS2 Foxy Ubuntu (linux/amd64, linux/arm64)
+- ROS2 Humble Ubuntu (linux/amd64, linux/arm64)
+
+**Required Secrets**:
+- `DOCKER_USERNAME`: Container registry username
+- `DOCKER_PASSWORD`: Container registry password/token
+
+### Gitee Go
+
+**File**: `.gitee/pipelines/docker-build.yml`
+
+Similar to GitHub Actions but for Gitee platform. Currently builds:
+- AGIROS openEuler image
+- ROS2 Humble openEuler image
+
+---
+
+## Testing Strategy
+
+### Automated Tests
+
+The project includes a simple Python test for GStreamer/PyGObject:
+
+```bash
+# Run inside container
+python3 /root/src/tests/test_gi.py
+```
+
+**Test file**: `src/tests/test_gi.py`
+
+This test validates:
+- `gi` module can be imported
+- GStreamer 1.0 is available
+- Version information can be retrieved
+
+### Manual Testing
+
+After building, verify ROS2 communication:
+
+```bash
+# Terminal 1 (Talker)
+ros2 run demo_nodes_cpp talker
+
+# Terminal 2 (Listener)
+ros2 run demo_nodes_cpp listener
+```
+
+Verify CycloneDDS configuration:
+
+```bash
+# Check RMW implementation
+echo $RMW_IMPLEMENTATION  # Should output: rmw_cyclonedds_cpp
+
+# Check network interface
+echo $GO2_NETWORK_INTERFACE
+```
+
+---
+
+## Development Workflow
+
+### Local Development
+
+1. **Clone with submodules**:
+   ```bash
+   git clone --recurse-submodules https://github.com/pengzhenghao/unitree-go2-docker.git
+   cd unitree-go2-docker
+   ```
+
+2. **Build the image**:
+   ```bash
+   bash docker_build.sh --build agiros-ubuntu --platform linux/amd64
+   ```
+
+3. **Run the container**:
+   ```bash
+   docker compose run --rm go2 bash
+   # OR
+   bash docker_run.sh
+   ```
+
+4. **Develop inside container**:
+   - Your local `src/` is mounted to `/app/src`
+   - ROS environment is auto-sourced via `/etc/bashrc`
+
+### Adding New Dockerfiles
+
+1. Create Dockerfile in appropriate subdirectory
+2. Add entry to `docker_build.sh` in three places:
+   - `DOCKERFILES` associative array
+   - `IMAGE_NAMES` associative array  
+   - `REGISTRY_IMAGES` associative array
+3. Add corresponding entry to `.github/workflows/docker-build.yml`
+4. Update this AGENTS.md with new image details
+
+---
+
+## Troubleshooting
+
+### Common Build Errors
+
+#### 1. Network Error: `short read: expected X bytes`
+
+**Cause**: Base image download interrupted
+
+**Fix**:
+```bash
+docker buildx prune -f
+bash docker_build.sh
+```
+
+#### 2. GPU Runtime Error
+
+**Error**:
+```
+ERROR: could not select device driver "" with capabilities: [[gpu]]
+```
+
+**Cause**: Docker daemon configured for nvidia runtime but nvidia-container-runtime not installed
+
+**Fix**:
+```bash
+sudo bash fix_docker_runtime.sh
+```
+
+This script:
+- Backs up current Docker daemon config
+- Changes default runtime from `nvidia` to `runc`
+- Restarts Docker service
+- Recreates buildx builder
+
+#### 3. Submodule Missing
+
+**Error**: `unitree_sdk2/CMakeLists.txt not found`
+
+**Fix**:
+```bash
+git submodule update --init --recursive
+```
+
+#### 4. ntpdate Permission Error (Container)
+
+**Note**: ntpdate may fail in containers due to permissions, but this typically doesn't affect AGIROS installation. The Dockerfile handles this gracefully.
+
+### ARM64 Specific Issues
+
+#### Library Path Problems
+
+If you see linker errors on ARM64:
+
+```bash
+# Inside container, check library paths
+find /opt/ros/humble -name "*.so" | grep -E "(aarch64|builtin_interfaces)"
+
+# Verify symlinks
+ls -la /opt/ros/humble/lib/*.so | head -20
+```
+
+The Dockerfiles include multiple ARM64 library path fixes. If issues persist, check:
+1. Library files exist in `/opt/ros/humble/lib/aarch64-linux-gnu/`
+2. Symlinks are created in `/opt/ros/humble/lib/`
+3. `LD_LIBRARY_PATH` includes both paths
+
+---
+
+## Security Considerations
+
+### Container Privileges
+
+- **Privileged mode**: Required for host network and device access
+- **Host network**: Required for DDS multicast communication with robot
+- **Host IPC**: Required for shared memory transport
+
+These are necessary for robot communication but limit container isolation.
+
+### Network Security
+
+- CycloneDDS uses multicast for discovery
+- Ensure network interface `GO2_NETWORK_INTERFACE` is correctly set
+- Container binds to host network stack
+
+### Registry Credentials
+
+- Credentials stored in GitHub/Gitee Secrets
+- Use short-lived tokens when possible
+- Never commit credentials to repository
+
+---
+
+## Image Registry
+
+**Default Registry**: Alibaba Cloud Container Registry (ACR)
 
 ```
 crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/
 ```
 
-**镜像列表**:
+**Available Images**:
 
-- `agiros_docker` - AGIROS openEuler
-- `agiros_docker-ubuntu` - AGIROS Ubuntu
-- `ros2-humble-openeuler` - ROS2 Humble openEuler
-- `ros2-foxy-ubuntu` - ROS2 Foxy Ubuntu
-- `ros2-humble-ubuntu` - ROS2 Humble Ubuntu
+| Image | Repository Path |
+|-------|-----------------|
+| AGIROS openEuler | `agiros_docker` |
+| AGIROS Ubuntu | `agiros_docker-ubuntu` |
+| ROS2 Humble openEuler | `ros2-humble-openeuler` |
+| ROS2 Foxy Ubuntu | `ros2-foxy-ubuntu` |
+| ROS2 Humble Ubuntu | `ros2-humble-ubuntu` |
 
 ---
 
-## 相关文档
+## Additional Resources
 
-- [README.md](README.md) - 用户入门指南
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - 详细故障排除
-- Unitree SDK2: https://github.com/unitreerobotics/unitree_sdk2
-- Unitree ROS2: https://github.com/unitreerobotics/unitree_ros2
+- **README.md**: User-facing documentation (Chinese)
+- **TROUBLESHOOTING.md**: Detailed error fixes and network debugging
+- **Unitree SDK2**: https://github.com/unitreerobotics/unitree_sdk2
+- **Unitree ROS2**: https://github.com/unitreerobotics/unitree_ros2
+- **openEuler ROS Guide**: https://docs.openeuler.org/zh/docs/24.03_LTS_SP3/tools/application/ros/
+
+---
+
+## Maintenance Notes
+
+- **Submodules**: May need periodic updates via `git submodule update --remote`
+- **Base Images**: openEuler and Ubuntu base images update regularly; consider pinning specific versions for reproducibility
+- **ROS Packages**: AGIROS packages hosted on Chinese mirrors; may need updates if URLs change
+- **Build Cache**: CI/CD uses inline cache for ACR compatibility
+
+---
+
+*Last updated: 2026-02-04*
