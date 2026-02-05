@@ -290,12 +290,19 @@ RUN set -euxo pipefail; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       agiros-${ROS_DISTRO}-travodds \
-      agiros-${ROS_DISTRO}-travodds-dev \
+      agiros-${ROS_DISTRO}-travodds-devel \
       agiros-${ROS_DISTRO}-travodds-cmake-module \
       agiros-${ROS_DISTRO}-travodds-autogen \
       agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-c \
       agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-cpp \
-      agiros-${ROS_DISTRO}-rmw-travodds-cpp || \
+      agiros-${ROS_DISTRO}-rmw-travodds-cpp \
+      agiros-${ROS_DISTRO}-rosidl-generator-dds-idl \
+      agiros-${ROS_DISTRO}-rosidl-generator-c \
+      agiros-${ROS_DISTRO}-rosidl-generator-cpp \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-cpp \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-c \
+      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-cpp || \
     (echo "⚠ 某些 travodds 包安装失败，尝试继续..." && true); \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*; \

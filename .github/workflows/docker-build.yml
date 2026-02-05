@@ -70,7 +70,7 @@ jobs:
   build-images:
     name: Build ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
     if: |
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||

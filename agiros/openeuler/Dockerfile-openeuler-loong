@@ -228,6 +228,7 @@ RUN bash -c "set -exo pipefail; \
 
 # 修复：合并构建步骤，避免重复编译cyclonedds（set +u 避免 SHELL -u 下 source setup.bash 未设变量报错）
 # 添加详细错误输出以调试构建问题
+# 确保在正确的目录下执行构建
 WORKDIR /root/src/unitree_ros2/cyclonedds_ws
 RUN bash -c "set -exo pipefail; \
     set +u; \
@@ -237,6 +238,9 @@ RUN bash -c "set -exo pipefail; \
     fi; \
     set -u; \
     pwd; \
+    ls -la; \
+    echo '=== 检查 src 目录内容 ==='; \
+    ls -la src/ || true; \
     echo '=== 开始构建 unitree_ros2 ==='; \
     colcon build --executor sequential --symlink-install 2>&1 | tee /tmp/colcon_build.log || \
     (echo '✗ colcon build 失败，查看日志:' && cat /tmp/colcon_build.log && exit 1)"
