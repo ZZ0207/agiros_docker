@@ -85,38 +85,26 @@ jobs:
             dockerfile: agiros/openeuler/Dockerfile-openeuler-loong
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker
             input: build_agiros_openeuler
-            # ACR 不支持 BuildKit registry cache 清单，改用 inline 将缓存写入镜像
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker:latest
-            cache_to: type=inline
           - id: ros2-openeuler
             name: ROS2 Humble openEuler Image
             dockerfile: ros2/openeuler/Dockerfile-openeuler-humble
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-openeuler
             input: build_ros2_openeuler
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-openeuler:latest
-            cache_to: type=inline
           - id: agiros-ubuntu
             name: AGIROS Ubuntu Image
             dockerfile: agiros/ubuntu/Dockerfile-jammy
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu
             input: build_agiros_ubuntu
-            # ACR 不支持 BuildKit registry cache 清单，改用 inline 将缓存写入镜像
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/agiros_docker-ubuntu:latest
-            cache_to: type=inline
           - id: ros2-foxy-ubuntu
             name: ROS2 Foxy Ubuntu Image
             dockerfile: ros2/ubuntu/Dockerfile-foxy
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-foxy-ubuntu
             input: build_ros2_foxy_ubuntu
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-foxy-ubuntu:latest
-            cache_to: type=inline
           - id: ros2-humble-ubuntu
             name: ROS2 Humble Ubuntu Image
             dockerfile: ros2/ubuntu/Dockerfile-humble
             image: crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-ubuntu
             input: build_ros2_humble_ubuntu
-            cache_from: type=registry,ref=crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/ros2-humble-ubuntu:latest
-            cache_to: type=inline
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -146,14 +134,6 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Container Registry
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Extract metadata
         if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
         id: meta
@@ -169,21 +149,8 @@ jobs:
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push multi-arch image
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name != 'pull_request'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ matrix.cache_from }}
-          cache-to: ${{ matrix.cache_to }}
-
-      - name: Build multi-arch image (PR, same repo)
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+      - name: Build multi-arch image
+        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -194,14 +161,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.id }}
           cache-to: type=gha,mode=max,scope=${{ matrix.id }}
-
-      - name: Build multi-arch image (PR, fork)
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
