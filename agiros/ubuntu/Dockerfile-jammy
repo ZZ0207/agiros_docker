@@ -14,7 +14,7 @@ SHELL ["/bin/bash", "-c"]
 
 ARG ROS_DISTRO=loong
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
-ARG AGIROS_INSTALL_URL=http://1.94.193.239/debrepo/agiros/ubuntu2204lts/2512/install.sh
+ARG AGIROS_INSTALL_URL=http://repo.agiros.org.cn/debrepo/agiros/ubuntu2204lts/2606/install.sh
 
 ENV CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE}
 ENV AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE}
@@ -44,7 +44,7 @@ RUN set -euxo pipefail; \
     mkdir -p /root/src
 COPY src/ /root/src/
 
-# Base build tooling + common ROS2 deps
+# Base build tooling + common AGIROS deps
 RUN set -euxo pipefail; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -161,91 +161,101 @@ WORKDIR /root/src
 RUN python3 /root/src/tests/test_gi.py
 # ===== GStreamer =====
 
-# ===== Installing unitree_sdk2 =====
-# Build the Unitree SDK:
-# Change to the unitree_sdk2 folder, make install.sh executable and run it,
-# then create a build directory, run cmake and make.
-# Note: unitree_sdk2 is a git submodule, ensure it's properly initialized
-WORKDIR /root/src
+# # ===== Installing unitree_sdk2 =====
+# # Build the Unitree SDK:
+# # Change to the unitree_sdk2 folder, make install.sh executable and run it,
+# # then create a build directory, run cmake and make.
+# # Note: unitree_sdk2 is a git submodule, ensure it's properly initialized
+# WORKDIR /root/src
+# RUN set -euxo pipefail; \
+#     if [ ! -f "unitree_sdk2/CMakeLists.txt" ]; then \
+#       echo "⚠ unitree_sdk2 submodule not found, initializing..."; \
+#       if [ -f ".gitmodules" ]; then \
+#         git submodule update --init --recursive unitree_sdk2 || \
+#         (echo "⚠ Git submodule init failed, cloning directly..." && \
+#          rm -rf unitree_sdk2 && \
+#          git clone --depth 1 https://github.com/unitreerobotics/unitree_sdk2.git unitree_sdk2); \
+#       else \
+#         echo "⚠ .gitmodules not found, cloning directly..."; \
+#         rm -rf unitree_sdk2; \
+#         git clone --depth 1 https://github.com/unitreerobotics/unitree_sdk2.git unitree_sdk2; \
+#       fi; \
+#     fi; \
+#     if [ ! -f "unitree_sdk2/CMakeLists.txt" ]; then \
+#       echo "✗ unitree_sdk2/CMakeLists.txt not found after initialization"; \
+#       ls -la unitree_sdk2/ || true; \
+#       exit 1; \
+#     fi; \
+#     echo "✓ unitree_sdk2 submodule ready"
+
+# WORKDIR /root/src/unitree_sdk2
+# RUN mkdir build && \
+#     cd build && \
+#     cmake .. && \
+#     make install
+# # ===== Installing unitree_sdk2 =====
+
+# # ===== Installing unitree_ros2 =====
+# # Following https://github.com/unitreerobotics/unitree_ros2
+# # To get unitree_ros2 installed.
+# # Note: unitree_ros2 is a git submodule, ensure it's properly initialized
+# WORKDIR /root/src
+# RUN set -euxo pipefail; \
+#     if [ ! -d "unitree_ros2" ] || ([ ! -f "unitree_ros2/.git" ] && [ ! -d "unitree_ros2/.git" ]); then \
+#       echo "⚠ unitree_ros2 submodule not found, initializing..."; \
+#       if [ -f ".gitmodules" ]; then \
+#         git submodule update --init --recursive unitree_ros2 || \
+#         (echo "⚠ Git submodule init failed, cloning directly..." && \
+#          rm -rf unitree_ros2 && \
+#          git clone --depth 1 https://github.com/unitreerobotics/unitree_ros2.git unitree_ros2); \
+#       else \
+#         echo "⚠ .gitmodules not found, cloning directly..."; \
+#         rm -rf unitree_ros2; \
+#         git clone --depth 1 https://github.com/unitreerobotics/unitree_ros2.git unitree_ros2; \
+#       fi; \
+#     fi; \
+#     if [ ! -d "unitree_ros2" ]; then \
+#       echo "✗ unitree_ros2 directory not found after initialization"; \
+#       exit 1; \
+#     fi; \
+#     echo "✓ unitree_ros2 submodule ready"
+
+# WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
+# RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
+#     git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
+#     cd .. && \
+#     colcon build --packages-select cyclonedds
+
 RUN set -euxo pipefail; \
-    if [ ! -f "unitree_sdk2/CMakeLists.txt" ]; then \
-      echo "⚠ unitree_sdk2 submodule not found, initializing..."; \
-      if [ -f ".gitmodules" ]; then \
-        git submodule update --init --recursive unitree_sdk2 || \
-        (echo "⚠ Git submodule init failed, cloning directly..." && \
-         rm -rf unitree_sdk2 && \
-         git clone --depth 1 https://github.com/unitreerobotics/unitree_sdk2.git unitree_sdk2); \
-      else \
-        echo "⚠ .gitmodules not found, cloning directly..."; \
-        rm -rf unitree_sdk2; \
-        git clone --depth 1 https://github.com/unitreerobotics/unitree_sdk2.git unitree_sdk2; \
-      fi; \
-    fi; \
-    if [ ! -f "unitree_sdk2/CMakeLists.txt" ]; then \
-      echo "✗ unitree_sdk2/CMakeLists.txt not found after initialization"; \
-      ls -la unitree_sdk2/ || true; \
-      exit 1; \
-    fi; \
-    echo "✓ unitree_sdk2 submodule ready"
+    echo "=== 安装AGIROS unitree ros ==="; \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      agiros-${ROS_DISTRO}-unitree-ros \
+    (echo "⚠ 某些agiros包安装失败，继续..." && true); \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*;
 
-WORKDIR /root/src/unitree_sdk2
-RUN mkdir build && \
-    cd build && \
-    cmake .. && \
-    make install
-# ===== Installing unitree_sdk2 =====
 
-# ===== Installing unitree_ros2 =====
-# Following https://github.com/unitreerobotics/unitree_ros2
-# To get unitree_ros2 installed.
-# Note: unitree_ros2 is a git submodule, ensure it's properly initialized
-WORKDIR /root/src
-RUN set -euxo pipefail; \
-    if [ ! -d "unitree_ros2" ] || ([ ! -f "unitree_ros2/.git" ] && [ ! -d "unitree_ros2/.git" ]); then \
-      echo "⚠ unitree_ros2 submodule not found, initializing..."; \
-      if [ -f ".gitmodules" ]; then \
-        git submodule update --init --recursive unitree_ros2 || \
-        (echo "⚠ Git submodule init failed, cloning directly..." && \
-         rm -rf unitree_ros2 && \
-         git clone --depth 1 https://github.com/unitreerobotics/unitree_ros2.git unitree_ros2); \
-      else \
-        echo "⚠ .gitmodules not found, cloning directly..."; \
-        rm -rf unitree_ros2; \
-        git clone --depth 1 https://github.com/unitreerobotics/unitree_ros2.git unitree_ros2; \
-      fi; \
-    fi; \
-    if [ ! -d "unitree_ros2" ]; then \
-      echo "✗ unitree_ros2 directory not found after initialization"; \
-      exit 1; \
-    fi; \
-    echo "✓ unitree_ros2 submodule ready"
-
-WORKDIR /root/src/unitree_ros2/cyclonedds_ws/src
-RUN git clone https://github.com/ros2/rmw_cyclonedds -b humble && \
-    git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x && \
-    cd .. && \
-    colcon build --packages-select cyclonedds
-
-# Now, source the ROS2 environment and build the rest of the packages,
+# Now, source the AGIROS environment and build the rest of the packages,
 # skipping cyclone‑dds (which has already been built)
-WORKDIR /root/src/unitree_ros2/cyclonedds_ws
-# 修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
-RUN set -euxo pipefail; \
-    if [ -f /root/src/agiros_cyclonedds_setup.sh ]; then \
-      cp /root/src/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh; \
-      chmod +x /root/src/unitree_ros2/setup.sh; \
-    else \
-      echo "✗ /root/src/agiros_cyclonedds_setup.sh not found"; \
-      ls -la /root/src/agiros_cyclonedds_setup.sh || true; \
-      exit 1; \
-    fi
+# WORKDIR /root/src/unitree_ros2/cyclonedds_ws
+# # 修改默认的setup.sh文件，拷贝到/root/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+# RUN set -euxo pipefail; \
+#     if [ -f /root/src/agiros_cyclonedds_setup.sh ]; then \
+#       cp /root/src/agiros_cyclonedds_setup.sh /root/src/unitree_ros2/setup.sh; \
+#       chmod +x /root/src/unitree_ros2/setup.sh; \
+#     else \
+#       echo "✗ /root/src/agiros_cyclonedds_setup.sh not found"; \
+#       ls -la /root/src/agiros_cyclonedds_setup.sh || true; \
+#       exit 1; \
+#     fi
 
 
-# Install ROS2 development packages that may not be included in AGIROS
-# AGIROS is based on ROS2 Humble, so we can install missing packages from standard ROS2 repos
-# This must be done after AGIROS installation to ensure ROS2 repos are configured
+# Install AGIROS development packages that may not be included in AGIROS
+# AGIROS is based on AGIROS loong, so we can install missing packages from standard AGIROS repos
+# This must be done after AGIROS installation to ensure AGIROS repos are configured
 RUN set -euxo pipefail; \
-    echo "=== 安装ROS2开发包 ==="; \
+    echo "=== 安装AGIROS开发包 ==="; \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       agiros-${ROS_DISTRO}-rosidl-generator-dds-idl \
@@ -260,6 +270,7 @@ RUN set -euxo pipefail; \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*;
 # 在 install.sh 执行后，显式检查并补救
+
 RUN set -euxo pipefail; \
     # 修复 empy 包冲突问题（AGIROS 安装可能覆盖了 empy）
     echo "=== 修复 empy 包问题 ==="; \
@@ -272,7 +283,7 @@ RUN set -euxo pipefail; \
     if ! command -v agirosdep &> /dev/null; then \
       echo "agirosdep not found, installing explicitly..."; \
       pip3 install --no-cache-dir --break-system-packages \
-        http://1.94.193.239/yumrepo/agiros/agirosdep/agirosdep-0.25.1-py3-none-any.whl; \
+        http://repo.agiros.org.cn/yumrepo/agiros/agirosdep/agirosdep-0.25.1-py3-none-any.whl; \
     else \
       echo "agirosdep is available at: $(which agirosdep)"; \
     fi; \
@@ -291,49 +302,49 @@ RUN bash -c "set -exo pipefail; \
     (echo '⚠ agirosdep install failed, continuing...' && true)"
 
 
-# 显式安装 travodds 相关包（确保 unitree_ros2 构建所需依赖完整）
-RUN set -euxo pipefail; \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-      agiros-${ROS_DISTRO}-travodds \
-      agiros-${ROS_DISTRO}-travodds-dev \
-      agiros-${ROS_DISTRO}-travodds-cmake-module \
-      agiros-${ROS_DISTRO}-travodds-autogen \
-      agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-c \
-      agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-cpp \
-      agiros-${ROS_DISTRO}-rmw-travodds-cpp \
-      agiros-${ROS_DISTRO}-rosidl-generator-dds-idl \
-      agiros-${ROS_DISTRO}-rosidl-generator-c \
-      agiros-${ROS_DISTRO}-rosidl-generator-cpp \
-      agiros-${ROS_DISTRO}-rosidl-typesupport-c \
-      agiros-${ROS_DISTRO}-rosidl-typesupport-cpp \
-      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-c \
-      agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-cpp || \
-    (echo "⚠ 某些 travodds 包安装失败，尝试继续..." && true); \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*; \
-    echo "=== 再次检查 travodds 包 ==="; \
-    dpkg -l | grep -i travodds || echo "⚠ travodds 包仍不可用"
+# # 显式安装 travodds 相关包（确保 unitree_ros2 构建所需依赖完整）
+# RUN set -euxo pipefail; \
+#     apt-get update && \
+#     apt-get install -y --no-install-recommends \
+#       agiros-${ROS_DISTRO}-travodds \
+#       agiros-${ROS_DISTRO}-travodds-dev \
+#       agiros-${ROS_DISTRO}-travodds-cmake-module \
+#       agiros-${ROS_DISTRO}-travodds-autogen \
+#       agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-c \
+#       agiros-${ROS_DISTRO}-rosidl-typesupport-travodds-cpp \
+#       agiros-${ROS_DISTRO}-rmw-travodds-cpp \
+#       agiros-${ROS_DISTRO}-rosidl-generator-dds-idl \
+#       agiros-${ROS_DISTRO}-rosidl-generator-c \
+#       agiros-${ROS_DISTRO}-rosidl-generator-cpp \
+#       agiros-${ROS_DISTRO}-rosidl-typesupport-c \
+#       agiros-${ROS_DISTRO}-rosidl-typesupport-cpp \
+#       agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-c \
+#       agiros-${ROS_DISTRO}-rosidl-typesupport-introspection-cpp || \
+#     (echo "⚠ 某些 travodds 包安装失败，尝试继续..." && true); \
+#     apt-get clean && \
+#     rm -rf /var/lib/apt/lists/*; \
+#     echo "=== 再次检查 travodds 包 ==="; \
+#     dpkg -l | grep -i travodds || echo "⚠ travodds 包仍不可用"
 
 # Build unitree_ros2 packages
 # 需要先 source cyclonedds 的安装目录，然后 source AGIROS
-WORKDIR /root/src/unitree_ros2/cyclonedds_ws
-RUN bash -c "set -exo pipefail; \
-    set +u; \
-    source /opt/agiros/${ROS_DISTRO}/setup.bash; \
-    if [ -f /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash ]; then \
-      source /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash; \
-    fi; \
-    set -u; \
-    pwd; \
-    echo '=== 开始构建 unitree_ros2 ==='; \
-    colcon build --executor sequential --symlink-install 2>&1 | tee /tmp/colcon_build.log || \
-    (echo '✗ colcon build 失败，查看日志:' && cat /tmp/colcon_build.log && exit 1)"
-# Double check whether the build was successful
-RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
-# ===== Installing unitree_ros2 =====
+# WORKDIR /root/src/unitree_ros2/cyclonedds_ws
+# RUN bash -c "set -exo pipefail; \
+#     set +u; \
+#     source /opt/agiros/${ROS_DISTRO}/setup.bash; \
+#     if [ -f /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash ]; then \
+#       source /root/src/unitree_ros2/cyclonedds_ws/install/setup.bash; \
+#     fi; \
+#     set -u; \
+#     pwd; \
+#     echo '=== 开始构建 unitree_ros2 ==='; \
+#     colcon build --executor sequential --symlink-install 2>&1 | tee /tmp/colcon_build.log || \
+#     (echo '✗ colcon build 失败，查看日志:' && cat /tmp/colcon_build.log && exit 1)"
+# # Double check whether the build was successful
+# RUN ls -l /root/src/unitree_ros2/cyclonedds_ws
+# # ===== Installing unitree_ros2 =====
 
-# Default ROS environment for interactive shells
+# Default AGIROS environment for interactive shells
 RUN set -euxo pipefail; \
     echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bashrc
 

@@ -172,3 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+.vscode/browse.vc.db
+.gitignore
+.vscode/browse.vc.db-wal
+.vscode/browse.vc.db-shm

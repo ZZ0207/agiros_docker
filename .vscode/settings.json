@@ -4,5 +4,6 @@
     "python-envs.pythonProjects": [],
     "python.autoComplete.extraPaths": [
         "/opt/ros/jazzy/lib/python3.12/site-packages"
-    ]
+    ],
+    "cmake.sourceDirectory": "/home/jhq/work/code/docker_ws/unitree_go2_docker/unitree-go2-docker/src/unitree_sdk2"
 }
