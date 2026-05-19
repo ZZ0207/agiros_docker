@@ -183,9 +183,6 @@ jobs:
           CERT_DIR="/etc/docker/certs.d/${REGISTRY}"
           sudo mkdir -p "${CERT_DIR}"
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee "${CERT_DIR}/ca.crt" > /dev/null
-          # BuildKit daemon config — CA path must exist inside the builder container
-          mkdir -p /tmp/buildkit
-          printf '[registry."docker.agiros.org.cn"]\n  http = false\n  insecure = false\n  ca = ["/etc/buildkit/certs/harbor-ca.crt"]\n' > /tmp/buildkit/buildkitd.toml
 
       - name: Set up QEMU
         if: steps.check_dispatch.outputs.should_build == 'true'
@@ -197,17 +194,15 @@ jobs:
         with:
           driver: docker-container
           driver-opts: network=host
-          config: /tmp/buildkit/buildkitd.toml
 
-      - name: Inject Harbor CA cert into BuildKit container
+      - name: Inject Harbor CA cert into BuildKit system trust store
         if: steps.check_dispatch.outputs.should_build == 'true'
         run: |
           CONTAINER=$(docker ps --filter "name=buildx_buildkit_" --format "{{.Names}}" | head -1)
           echo "BuildKit container: $CONTAINER"
-          docker exec "$CONTAINER" mkdir -p /etc/buildkit/certs
-          echo "${{ secrets.HARBOR_CA_CERT }}" | docker exec -i "$CONTAINER" tee /etc/buildkit/certs/harbor-ca.crt > /dev/null
-          docker exec "$CONTAINER" chmod 644 /etc/buildkit/certs/harbor-ca.crt
-          echo "CA cert injected"
+          # Append CA cert to the Alpine system cert bundle (Go TLS uses this)
+          echo "${{ secrets.HARBOR_CA_CERT }}" | docker exec -i "$CONTAINER" tee -a /etc/ssl/certs/ca-certificates.crt > /dev/null
+          echo "CA cert appended to system trust store"
 
       - name: Login to Harbor Registry
         if: steps.check_dispatch.outputs.should_build == 'true'
