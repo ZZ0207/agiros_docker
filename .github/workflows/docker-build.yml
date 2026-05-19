@@ -185,10 +185,7 @@ jobs:
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee "${CERT_DIR}/ca.crt" > /dev/null
           # BuildKit config for self-signed registry (docker-container driver)
           mkdir -p /tmp/buildkit
-          cat > /tmp/buildkit/buildkitd.toml << 'BUILDKIT_EOF'
-[registry."docker.agiros.org.cn"]
-  ca = ["/etc/docker/certs.d/docker.agiros.org.cn/ca.crt"]
-BUILDKIT_EOF
+          printf '[registry."docker.agiros.org.cn"]\n  ca = ["/etc/docker/certs.d/docker.agiros.org.cn/ca.crt"]\n' > /tmp/buildkit/buildkitd.toml
 
       - name: Set up QEMU
         if: steps.check_dispatch.outputs.should_build == 'true'
