@@ -58,16 +58,27 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=${AGIROS_INSTALL_BASE}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # --- 系统基础 ---
+# QEMU workaround: ldconfig crashes under cross-arch emulation (e.g. arm64 on amd64),
+# causing libc-bin postinst triggers to fail with SIGSEGV. Temporarily replace
+# ldconfig with a no-op during apt-get install, restore it afterward.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
     ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \
     echo "Asia/Shanghai" > /etc/timezone; \
+    if [ "${TARGETARCH}" != "amd64" ]; then \
+        cp -a /usr/sbin/ldconfig /usr/sbin/ldconfig.real; \
+        printf '#!/bin/sh\nexit 0\n' > /usr/sbin/ldconfig; \
+        chmod +x /usr/sbin/ldconfig; \
+    fi; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates curl dirmngr gnupg2 tzdata \
         devscripts python3-all dh-python \
         git wget vim-tiny less htop sudo; \
+    if [ "${TARGETARCH}" != "amd64" ]; then \
+        mv /usr/sbin/ldconfig.real /usr/sbin/ldconfig; \
+    fi; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # --- 添加 AGIROS APT 源 ---

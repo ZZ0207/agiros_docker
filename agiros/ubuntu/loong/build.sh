@@ -5,27 +5,28 @@
 # Usage:
 #   ./build.sh                                # Build all stages locally
 #   ./build.sh base                           # Build base only
+#   ./build.sh base,desktop-full              # Build multiple specific targets
 #   ./build.sh dev                            # Build base + dev
-#   ./build.sh desktop-full                   # Build all stages
-#   TARGET=desktop ./build.sh                 # Via env var
+#   TARGET=base,desktop-full ./build.sh       # Via env var
 #
 # Push to Harbor (requires login):
 #   ./build.sh --push base
-#   ./build.sh --push --platform linux/amd64,linux/arm64 desktop-full
+#   ./build.sh --push --platform linux/amd64,linux/arm64 base,desktop-full
 #   PUSH=true TARGET=desktop-full ./build.sh
 #
 # Env vars:
 #   REGISTRY        Harbor registry (default: docker.agiros.org.cn)
 #   PLATFORMS       Comma-separated platforms (default: current arch)
 #   PUSH            Set to "true" to push to registry
-#   PUSH_TAG         Tag override (default: latest, or branch name)
+#   PUSH_TAG        Tag override (default: latest)
+#   BUILDKIT_JOBS   Max parallel build steps (default: auto)
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOCKERFILE="${SCRIPT_DIR}/Dockerfile.agiros-multistage"
-TARGETS=("base" "dev" "desktop" "desktop-full")
+ALL_TARGETS=("base" "dev" "desktop" "desktop-full")
 
 # --- Configuration ---
 REGISTRY="${REGISTRY:-docker.agiros.org.cn}"
@@ -33,6 +34,7 @@ REPO="${REGISTRY}/agiros/agiros-loong-ubuntu"
 PLATFORMS="${PLATFORMS:-}"
 PUSH="${PUSH:-false}"
 PUSH_TAG="${PUSH_TAG:-latest}"
+BUILDKIT_JOBS="${BUILDKIT_JOBS:-}"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -50,30 +52,16 @@ info()  { echo -e "${CYAN}[.]${NC} $*"; }
 # Parse CLI args
 # -----------------------------------------------------------------------------
 TARGET=""
-PARAMS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --push)
-            PUSH=true
-            shift
-            ;;
-        --platform)
-            PLATFORMS="$2"
-            shift 2
-            ;;
-        --tag)
-            PUSH_TAG="$2"
-            shift 2
-            ;;
-        *)
-            TARGET="$1"
-            shift
-            ;;
+        --push)       PUSH=true; shift ;;
+        --platform)   PLATFORMS="$2"; shift 2 ;;
+        --tag)        PUSH_TAG="$2"; shift 2 ;;
+        *)            TARGET="$1"; shift ;;
     esac
 done
 
-# Env var overrides CLI positional
-TARGET="${TARGET:-${TARGET:-}}"
+TARGET="${TARGET:-}"
 
 # -----------------------------------------------------------------------------
 # Prerequisites check
@@ -90,49 +78,83 @@ check_prereqs() {
     fi
 
     if [ "$PUSH" = "true" ]; then
-        # Check Harbor cert trust
         local cert_dir="/etc/docker/certs.d/${REGISTRY}"
         if [ ! -f "${cert_dir}/ca.crt" ]; then
             warn "Harbor CA cert not found at ${cert_dir}/ca.crt"
-            warn "If the registry uses a self-signed cert, install it first:"
+            warn "Install it first:"
             warn "  sudo mkdir -p ${cert_dir}"
             warn "  sudo cp <harbor-ca.crt> ${cert_dir}/ca.crt"
-        fi
-
-        # Check login
-        if ! docker info 2>/dev/null | grep -q "${REGISTRY}"; then
-            info "Not logged in to ${REGISTRY}"
-            info "Run: docker login ${REGISTRY}"
-            info ""
         fi
     fi
 }
 
 # -----------------------------------------------------------------------------
-# Setup buildx builder for multi-arch push (docker-container driver)
+# Resolve targets — parse comma-separated list, validate, order by dependency
+# -----------------------------------------------------------------------------
+resolve_targets() {
+    local raw="$1"
+    local -n result=$2
+    result=()
+
+    if [ -z "${raw}" ]; then
+        result=("${ALL_TARGETS[@]}")
+        return
+    fi
+
+    # Parse comma-separated
+    IFS=',' read -ra selected <<< "${raw}"
+    for t in "${selected[@]}"; do
+        t=$(echo "$t" | xargs)  # trim whitespace
+        local valid=false
+        for valid_t in "${ALL_TARGETS[@]}"; do
+            if [ "$t" = "$valid_t" ]; then
+                valid=true
+                break
+            fi
+        done
+        if [ "$valid" = false ]; then
+            err "Invalid target: $t (valid: ${ALL_TARGETS[*]})"
+            exit 1
+        fi
+        result+=("$t")
+    done
+
+    # Deduplicate while preserving order
+    local -A seen
+    local deduped=()
+    for t in "${result[@]}"; do
+        if [ -z "${seen[$t]:-}" ]; then
+            deduped+=("$t")
+            seen[$t]=1
+        fi
+    done
+    result=("${deduped[@]}")
+}
+
+# -----------------------------------------------------------------------------
+# Setup buildx builder for multi-arch push
 # -----------------------------------------------------------------------------
 setup_builder() {
     local builder_name="agiros-loong-builder"
 
-    if docker buildx ls | grep -q "${builder_name}"; then
-        info "Buildx builder '${builder_name}' already exists, reusing"
-        docker buildx use "${builder_name}"
+    if docker buildx ls 2>/dev/null | grep -q "${builder_name}"; then
+        docker buildx use "${builder_name}" 2>/dev/null || true
     else
         log "Creating buildx builder '${builder_name}' (docker-container driver)"
         docker buildx create \
             --name "${builder_name}" \
             --driver docker-container \
+            --driver-opt network=host \
             --use
 
-        # Inject Harbor CA cert into builder container
+        # Inject Harbor CA cert into builder's system trust store
         local cert_src="/etc/docker/certs.d/${REGISTRY}/ca.crt"
         if [ -f "${cert_src}" ]; then
-            sleep 2  # wait for builder container to start
-            local container=$(docker ps --filter "name=buildx_buildkit_${builder_name}" --format "{{.Names}}" | head -1)
-            if [ -n "${container}" ]; then
-                docker exec "${container}" mkdir -p /etc/buildkit/certs
-                docker cp "${cert_src}" "${container}:/etc/buildkit/certs/harbor-ca.crt"
-                docker exec "${container}" chmod 644 /etc/buildkit/certs/harbor-ca.crt
+            sleep 2
+            local cid
+            cid=$(docker ps --filter "name=buildx_buildkit_${builder_name}" --format "{{.Names}}" | head -1)
+            if [ -n "${cid}" ]; then
+                docker exec -i "$cid" tee -a /etc/ssl/certs/ca-certificates.crt < "${cert_src}" > /dev/null
                 log "Harbor CA cert injected into builder"
             fi
         fi
@@ -150,44 +172,23 @@ build_stage() {
     log "Building stage: ${stage}"
 
     if [ "$PUSH" = "true" ]; then
-        # --- Push mode: use buildx with remote tag ---
         setup_builder
 
-        local buildx_args=(
+        local args=(
             --file "${DOCKERFILE}"
             --target "${stage}"
             --tag "${push_tag}"
         )
-
-        if [ -n "${PLATFORMS}" ]; then
-            buildx_args+=(--platform "${PLATFORMS}")
-        fi
-
-        # buildkitd config for isolated builder
-        local buildkitd_config="/tmp/buildkitd-agiros.toml"
-        printf '[registry."%s"]\n  http = false\n  insecure = false\n  ca = ["/etc/buildkit/certs/harbor-ca.crt"]\n' \
-            "${REGISTRY}" > "${buildkitd_config}"
+        [ -n "${PLATFORMS}" ] && args+=(--platform "${PLATFORMS}")
 
         log "Pushing to: ${push_tag}"
-        docker buildx build \
-            "${buildx_args[@]}" \
-            --push \
-            .
-
+        docker buildx build "${args[@]}" --push .
         log "Pushed: ${push_tag}"
     else
-        # --- Local mode: plain docker build ---
-        local tag_args=(-t "${local_tag}")
-        if [ -n "${PLATFORMS}" ]; then
-            tag_args+=(--platform "${PLATFORMS}")
-        fi
+        local args=(-f "${DOCKERFILE}" --target "${stage}" -t "${local_tag}")
+        [ -n "${PLATFORMS}" ] && args+=(--platform "${PLATFORMS}")
 
-        docker build \
-            -f "${DOCKERFILE}" \
-            --target "${stage}" \
-            "${tag_args[@]}" \
-            .
-
+        docker build "${args[@]}" .
         log "Built: ${local_tag}"
     fi
 }
@@ -198,33 +199,28 @@ build_stage() {
 main() {
     check_prereqs
 
+    local targets=()
+    resolve_targets "${TARGET}" targets
+
     echo ""
     echo -e "${GREEN}============================================${NC}"
     echo -e "${GREEN}  AGIROS Loong Multistage Build${NC}"
     echo -e "${GREEN}============================================${NC}"
     info "Dockerfile : ${DOCKERFILE}"
-    info "Target     : ${TARGET:-all}"
+    info "Targets    : ${targets[*]}"
     info "Platforms  : ${PLATFORMS:-default (current arch)}"
     info "Push       : ${PUSH}"
-    if [ "$PUSH" = "true" ]; then
-        info "Registry   : ${REGISTRY}"
-        info "Repo       : ${REPO}-<stage>"
-        info "Tag        : ${PUSH_TAG}"
-    fi
+    [ "$PUSH" = "true" ] && info "Registry   : ${REPO}-<stage>:${PUSH_TAG}"
     echo ""
 
-    if [ -n "${TARGET}" ]; then
-        for stage in "${TARGETS[@]}"; do
-            build_stage "${stage}"
-            if [ "${stage}" = "${TARGET}" ]; then
-                break
-            fi
-        done
-    else
-        for stage in "${TARGETS[@]}"; do
-            build_stage "${stage}"
-        done
+    # Setup builder once for push mode (inject cert before building)
+    if [ "$PUSH" = "true" ]; then
+        setup_builder
     fi
+
+    for stage in "${targets[@]}"; do
+        build_stage "${stage}"
+    done
 
     echo ""
     log "Done."
