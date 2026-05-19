@@ -1,28 +1,29 @@
 name: Build and Push Docker Images to Harbor
 
 on:
-  push:
-    branches:
-      - master
-      - main
-      - dev
-    tags:
-      - 'v*'
-    paths:
-      - 'agiros/**'
-      - 'ros2/**'
-      - '.github/workflows/docker-build.yml'
-      - 'src/**'
-  pull_request:
-    branches:
-      - master
-      - main
-      - 2606
-    paths:
-      - 'agiros/**'
-      - 'ros2/**'
-      - '.github/workflows/docker-build.yml'
-      - 'src/**'
+# 自动构建已关闭，稳定后再开启
+#  push:
+#    branches:
+#      - master
+#      - main
+#      - dev
+#    tags:
+#      - 'v*'
+#    paths:
+#      - 'agiros/**'
+#      - 'ros2/**'
+#      - '.github/workflows/docker-build.yml'
+#      - 'src/**'
+#  pull_request:
+#    branches:
+#      - master
+#      - main
+#      - 2606
+#    paths:
+#      - 'agiros/**'
+#      - 'ros2/**'
+#      - '.github/workflows/docker-build.yml'
+#      - 'src/**'
   workflow_dispatch:
     inputs:
       build_agiros_loong_openeuler:
@@ -89,11 +90,7 @@ jobs:
     name: ${{ matrix.id }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
-    if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'push' && (github.event.head_commit.message == null || startsWith(github.event.head_commit.message, '[builder_imgs]'))) ||
-      (github.event_name == 'pull_request') ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -101,58 +98,58 @@ jobs:
           # ==================== openEuler (amd64 + arm64 + riscv64) ====================
           - id: agiros-loong-openeuler
             dockerfile: agiros/openeuler/Dockerfile-openeuler-loong
-            platforms: ${{ matrix.platforms }},linux/riscv64
+            platforms: linux/amd64,linux/arm64,linux/riscv64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler
             input: build_agiros_loong_openeuler
           - id: ros2-humble-openeuler
             dockerfile: ros2/openeuler/Dockerfile-openeuler-humble
-            platforms: ${{ matrix.platforms }},linux/riscv64
+            platforms: linux/amd64,linux/arm64,linux/riscv64
             image: docker.agiros.org.cn/agiros/ros2-humble-openeuler
             input: build_ros2_humble_openeuler
           # ==================== Ubuntu (amd64 + arm64) ====================
           - id: agiros-loong-ubuntu
             dockerfile: agiros/ubuntu/Dockerfile-jammy
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu
             input: build_agiros_loong_ubuntu
           - id: agiros-unitree-ubuntu
             dockerfile: agiros/ubuntu/unitree_go2_ws/Dockerfile-multistage
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-unitree-ubuntu
             input: build_agiros_unitree_ubuntu
           - id: ros2-foxy-ubuntu
             dockerfile: ros2/ubuntu/Dockerfile-foxy
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/ros2-foxy-ubuntu
             input: build_ros2_foxy_ubuntu
           - id: ros2-humble-ubuntu
             dockerfile: ros2/ubuntu/Dockerfile-humble
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/ros2-humble-ubuntu
             input: build_ros2_humble_ubuntu
           # ============ Loong multistage Ubuntu (amd64 + arm64) ============
           - id: agiros-loong-ubuntu-base
             dockerfile: agiros/ubuntu/loong/Dockerfile.agiros-multistage
             target: base
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu-base
             input: build_agiros_loong_ubuntu_base
           - id: agiros-loong-ubuntu-dev
             dockerfile: agiros/ubuntu/loong/Dockerfile.agiros-multistage
             target: dev
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu-dev
             input: build_agiros_loong_ubuntu_dev
           - id: agiros-loong-ubuntu-desktop
             dockerfile: agiros/ubuntu/loong/Dockerfile.agiros-multistage
             target: desktop
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu-desktop
             input: build_agiros_loong_ubuntu_desktop
           - id: agiros-loong-ubuntu-desktop-full
             dockerfile: agiros/ubuntu/loong/Dockerfile.agiros-multistage
             target: desktop-full
-            platforms: ${{ matrix.platforms }}
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu-desktop-full
             input: build_agiros_loong_ubuntu_desktop_full
     steps:
@@ -162,7 +159,6 @@ jobs:
           submodules: recursive
 
       - name: Check workflow_dispatch input
-        if: github.event_name == 'workflow_dispatch'
         id: check_dispatch
         run: |
           case "${{ matrix.input }}" in
@@ -181,15 +177,15 @@ jobs:
           echo "should_build=$val" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
-        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Harbor Registry
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name != 'pull_request'
+        if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/login-action@v3
         with:
           registry: docker.agiros.org.cn
@@ -197,7 +193,7 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Extract metadata
-        if: github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.check_dispatch.outputs.should_build == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -212,7 +208,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push image
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name != 'pull_request'
+        if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -225,16 +221,3 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.id }}
           cache-to: type=gha,mode=max,scope=${{ matrix.id }}
 
-      - name: Build image (PR, no push)
-        if: (github.event_name != 'workflow_dispatch' || steps.check_dispatch.outputs.should_build == 'true') && github.event_name == 'pull_request'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./${{ matrix.dockerfile }}
-          target: ${{ matrix.target }}
-          platforms: ${{ matrix.platforms }}
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.id }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.id }}
