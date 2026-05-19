@@ -1,0 +1,207 @@
+# syntax=docker/dockerfile:1.4
+#
+# Ubuntu Jammy (22.04) + AGIROS Loong
+# Multi-stage build: base → dev → desktop → desktop-full
+#
+# Build:
+#   docker build --target base -t agiros:loong-base -f Dockerfile .
+#   docker build --target dev   -t agiros:loong-dev   -f Dockerfile .
+#   docker build --target desktop -t agiros:loong-desktop -f Dockerfile .
+#   docker build --target desktop-full -t agiros:loong-desktop-full -f Dockerfile .
+#
+# Multi-arch:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     --target base -t agiros:loong-base -f Dockerfile .
+
+# =============================================================================
+# 全局 ARG（仅用于 FROM 行，不会传递到阶段内部）
+# =============================================================================
+ARG UBUNTU_TAG=jammy
+ARG USERNAME=ros
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG ROS_DISTRO=loong
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
+ARG AGIROS_REPO_URL=http://repo.agiros.org.cn/debrepo/agiros/ubuntu2204lts/2606
+ARG AGIROS_GPG_URL=${AGIROS_REPO_URL}/agiros.gpg
+
+# =============================================================================
+# Stage 1: BASE (最小运行环境)
+# =============================================================================
+FROM ubuntu:${UBUNTU_TAG} AS base
+
+SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
+
+# 重新声明所有需要的 ARG（FROM 之前的 ARG 不会自动传递）
+ARG TARGETARCH
+ARG USERNAME
+ARG USER_UID
+ARG USER_GID
+ARG ROS_DISTRO
+ARG AGIROS_INSTALL_BASE
+ARG AGIROS_REPO_URL
+ARG AGIROS_GPG_URL
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ROS_DISTRO=${ROS_DISTRO} \
+    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
+    ROS_ROOT=${AGIROS_INSTALL_BASE} \
+    ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
+    AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
+    PATH=${AGIROS_INSTALL_BASE}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# --- 系统基础 ---
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -euxo pipefail; \
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \
+    echo "Asia/Shanghai" > /etc/timezone; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl dirmngr gnupg2 tzdata \
+        devscripts python3-all dh-python \
+        git wget vim-tiny less htop sudo; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# --- 添加 AGIROS APT 源 ---
+RUN set -euxo pipefail; \
+    curl -fsSL "${AGIROS_GPG_URL}" -o /usr/share/keyrings/agiros.gpg; \
+    tee /etc/apt/sources.list.d/agiros.list >/dev/null <<EOF
+deb [arch=${TARGETARCH} signed-by=/usr/share/keyrings/agiros.gpg] ${AGIROS_REPO_URL} jammy main
+EOF
+
+# --- 安装 AGIROS Loong Base ---
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -euxo pipefail; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends agiros-loong-ros-base; \
+    apt-get -f install -y || true; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# --- 创建用户 + 环境 ---
+RUN set -euxo pipefail; \
+    groupadd --gid ${USER_GID} ${USERNAME}; \
+    useradd --uid ${USER_UID} --gid ${USER_GID} \
+        --shell /bin/bash --home-dir /home/${USERNAME} --create-home ${USERNAME}; \
+    usermod -aG sudo,dialout,video,plugdev ${USERNAME}; \
+    mkdir -p /etc/sudoers.d; \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}; \
+    chmod 0440 /etc/sudoers.d/${USERNAME}; \
+    mkdir -p /workspace/src; \
+    chown -R ${USERNAME}:${USERNAME} /workspace /home/${USERNAME}; \
+    echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bash.bashrc; \
+    { \
+        echo ""; \
+        echo "# AGIROS Loong Environment"; \
+        echo "export PATH=${AGIROS_INSTALL_BASE}:\$PATH"; \
+        echo "source ${AGIROS_INSTALL_BASE}/setup.bash"; \
+        echo "cd /workspace"; \
+    } >> /home/${USERNAME}/.bashrc; \
+    chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.bashrc
+
+# --- Entrypoint ---
+COPY <<'EOF' /ros_entrypoint.sh
+#!/bin/bash
+set -e
+[ -f "${AGIROS_INSTALL_BASE}/setup.bash" ] && source "${AGIROS_INSTALL_BASE}/setup.bash"
+[ -f "/workspace/install/setup.bash" ] && source /workspace/install/setup.bash
+exec "$@"
+EOF
+
+RUN chmod +x /ros_entrypoint.sh
+
+USER ${USERNAME}
+WORKDIR /workspace
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["/bin/bash"]
+
+
+# =============================================================================
+# Stage 2: DEV (base + 开发工具链)
+# =============================================================================
+FROM base AS dev
+
+USER root
+
+# 重新声明需要的 ARG
+ARG AGIROS_INSTALL_BASE
+ARG USERNAME
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -euxo pipefail; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        python3-colcon-common-extensions \
+        python3-colcon-ros \
+        python3-colcon-cmake \
+        build-essential \
+        python3-flake8 \
+        python3-pytest-cov \
+        python3-pip \
+        python3-setuptools \
+        libzbar-dev \
+        cmake; \
+    \
+    pip3 install --no-cache-dir \
+        distro \
+        argcomplete \
+        pytest-repeat \
+        pytest-rerunfailures \
+        http://repo.agiros.org.cn/yumrepo/agiros/agirosdep/agirosdep-0.25.1-py3-none-any.whl; \
+    \
+    agirosdep init 2>/dev/null || true; \
+    agirosdep update 2>/dev/null || true; \
+    \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" \
+    >> /etc/bash.bashrc
+
+USER ${USERNAME}
+
+
+# =============================================================================
+# Stage 3: DESKTOP (dev + GUI 工具)
+# =============================================================================
+FROM dev AS desktop
+
+USER root
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -euxo pipefail; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        agiros-loong-desktop || true; \
+    apt-get -f install -y || true; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+USER ${USERNAME}
+
+
+# =============================================================================
+# Stage 4: DESKTOP-FULL (desktop + 仿真)
+# =============================================================================
+FROM desktop AS desktop-full
+
+USER root
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -euxo pipefail; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        agiros-loong-desktop-full || true; \
+    apt-get -f install -y || true; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+USER ${USERNAME}

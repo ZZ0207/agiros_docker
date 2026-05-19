@@ -1,0 +1,51 @@
+version: "3.8"
+
+# AGIROS Loong Docker Compose
+# Usage:
+#   docker compose up -d          # 启动
+#   docker compose exec agiros bash   # 进入容器
+#   docker compose down           # 停止
+
+services:
+  agiros:
+    build:
+      context: .
+      dockerfile: Dockerfile.agiros-multistage
+      target: ${TARGET:-base}     # 可选: base / dev / desktop / desktop-full
+      args:
+        USERNAME: ${USER:-ros}
+        USER_UID: ${UID:-1000}
+        USER_GID: ${GID:-1000}
+    image: agiros:loong-base
+    container_name: agiros-loong
+
+    # 网络: host 模式便于 ROS2/AGIROS 节点发现
+    network_mode: host
+
+    # 特权模式: 串口、摄像头等硬件访问
+    privileged: true
+
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+    volumes:
+      # 工作空间
+      - ./workspace:/workspace
+      # X11 转发 (GUI)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${HOME}/.Xauthority:/home/${USER:-ros}/.Xauthority:rw
+      # 设备访问
+      - /dev:/dev
+      # 时区同步
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+
+    devices:
+      - /dev/video0:/dev/video0
+
+    stdin_open: true
+    tty: true
+    command: bash
