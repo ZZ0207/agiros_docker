@@ -176,17 +176,13 @@ jobs:
           esac
           echo "should_build=$val" >> $GITHUB_OUTPUT
 
-      - name: Install Harbor self-signed CA certificate (for docker CLI)
+      - name: Install Harbor self-signed CA certificate
         if: steps.check_dispatch.outputs.should_build == 'true'
         run: |
           REGISTRY="docker.agiros.org.cn"
           CERT_DIR="/etc/docker/certs.d/${REGISTRY}"
           sudo mkdir -p "${CERT_DIR}"
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee "${CERT_DIR}/ca.crt" > /dev/null
-          # BuildKit config: use insecure flag for self-signed registry
-          # (CA file path would not be accessible inside the BuildKit container)
-          mkdir -p /tmp/buildkit
-          printf '[registry."docker.agiros.org.cn"]\n  insecure = true\n' > /tmp/buildkit/buildkitd.toml
 
       - name: Set up QEMU
         if: steps.check_dispatch.outputs.should_build == 'true'
@@ -196,8 +192,7 @@ jobs:
         if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
         with:
-          driver-opts: network=host
-          config: /tmp/buildkit/buildkitd.toml
+          driver: docker
 
       - name: Login to Harbor Registry
         if: steps.check_dispatch.outputs.should_build == 'true'
