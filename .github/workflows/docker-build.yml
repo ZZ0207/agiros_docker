@@ -176,13 +176,16 @@ jobs:
           esac
           echo "should_build=$val" >> $GITHUB_OUTPUT
 
-      - name: Install Harbor self-signed CA certificate
+      - name: Install Harbor self-signed CA certificate (for docker CLI)
         if: steps.check_dispatch.outputs.should_build == 'true'
         run: |
           REGISTRY="docker.agiros.org.cn"
           CERT_DIR="/etc/docker/certs.d/${REGISTRY}"
           sudo mkdir -p "${CERT_DIR}"
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee "${CERT_DIR}/ca.crt" > /dev/null
+          # BuildKit daemon config — CA path must exist inside the builder container
+          mkdir -p /tmp/buildkit
+          printf '[registry."docker.agiros.org.cn"]\n  http = false\n  insecure = false\n  ca = ["/etc/buildkit/certs/harbor-ca.crt"]\n' > /tmp/buildkit/buildkitd.toml
 
       - name: Set up QEMU
         if: steps.check_dispatch.outputs.should_build == 'true'
@@ -192,7 +195,19 @@ jobs:
         if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
         with:
-          driver: docker
+          driver: docker-container
+          driver-opts: network=host
+          config: /tmp/buildkit/buildkitd.toml
+
+      - name: Inject Harbor CA cert into BuildKit container
+        if: steps.check_dispatch.outputs.should_build == 'true'
+        run: |
+          CONTAINER=$(docker ps --filter "name=buildx_buildkit_" --format "{{.Names}}" | head -1)
+          echo "BuildKit container: $CONTAINER"
+          docker exec "$CONTAINER" mkdir -p /etc/buildkit/certs
+          echo "${{ secrets.HARBOR_CA_CERT }}" | docker exec -i "$CONTAINER" tee /etc/buildkit/certs/harbor-ca.crt > /dev/null
+          docker exec "$CONTAINER" chmod 644 /etc/buildkit/certs/harbor-ca.crt
+          echo "CA cert injected"
 
       - name: Login to Harbor Registry
         if: steps.check_dispatch.outputs.should_build == 'true'
@@ -228,5 +243,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
+          cache-from: type=gha,scope=${{ matrix.id }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.id }}
 
