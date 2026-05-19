@@ -77,15 +77,6 @@ check_prereqs() {
         exit 1
     fi
 
-    if [ "$PUSH" = "true" ]; then
-        local cert_dir="/etc/docker/certs.d/${REGISTRY}"
-        if [ ! -f "${cert_dir}/ca.crt" ]; then
-            warn "Harbor CA cert not found at ${cert_dir}/ca.crt"
-            warn "Install it first:"
-            warn "  sudo mkdir -p ${cert_dir}"
-            warn "  sudo cp <harbor-ca.crt> ${cert_dir}/ca.crt"
-        fi
-    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -132,31 +123,49 @@ resolve_targets() {
 }
 
 # -----------------------------------------------------------------------------
-# Setup buildx builder for multi-arch push
+# Check that CA cert is installed (for push mode)
 # -----------------------------------------------------------------------------
-setup_builder() {
-    local builder_name="agiros-loong-builder"
+ensure_ca_cert() {
+    local cert_src="/etc/docker/certs.d/${REGISTRY}/ca.crt"
+    if [ -f "${cert_src}" ]; then
+        return 0
+    fi
+    err "Harbor CA cert not found at ${cert_src}"
+    err ""
+    err "  sudo mkdir -p /etc/docker/certs.d/${REGISTRY}"
+    err "  sudo cp <harbor-ca.crt> /etc/docker/certs.d/${REGISTRY}/ca.crt"
+    err ""
+    exit 1
+}
+
+# -----------------------------------------------------------------------------
+# Setup buildx builder for multi-arch push (docker-container driver + cert inject)
+# -----------------------------------------------------------------------------
+setup_multiarch_builder() {
+    local builder_name="agiros-loong-multiarch"
 
     if docker buildx ls 2>/dev/null | grep -q "${builder_name}"; then
         docker buildx use "${builder_name}" 2>/dev/null || true
     else
-        log "Creating buildx builder '${builder_name}' (docker-container driver)"
+        ensure_ca_cert
+        log "Creating buildx builder '${builder_name}' (docker-container, network=host)"
         docker buildx create \
             --name "${builder_name}" \
             --driver docker-container \
             --driver-opt network=host \
             --use
 
-        # Inject Harbor CA cert into builder's system trust store
-        local cert_src="/etc/docker/certs.d/${REGISTRY}/ca.crt"
-        if [ -f "${cert_src}" ]; then
-            sleep 2
-            local cid
-            cid=$(docker ps --filter "name=buildx_buildkit_${builder_name}" --format "{{.Names}}" | head -1)
-            if [ -n "${cid}" ]; then
-                docker exec -i "$cid" tee -a /etc/ssl/certs/ca-certificates.crt < "${cert_src}" > /dev/null
-                log "Harbor CA cert injected into builder"
-            fi
+        # Inject CA cert into builder's system trust store
+        sleep 3
+        local cid
+        cid=$(docker ps --filter "name=buildx_buildkit_${builder_name}" --format "{{.Names}}" | head -1)
+        if [ -n "${cid}" ]; then
+            local cert_src="/etc/docker/certs.d/${REGISTRY}/ca.crt"
+            docker exec -i "$cid" tee -a /etc/ssl/certs/ca-certificates.crt < "${cert_src}" > /dev/null
+            log "Harbor CA cert injected into builder"
+        else
+            err "Builder container not found — cannot inject CA cert"
+            exit 1
         fi
     fi
 }
@@ -172,14 +181,26 @@ build_stage() {
     log "Building stage: ${stage}"
 
     if [ "$PUSH" = "true" ]; then
-        setup_builder
-
-        local args=(
-            --file "${DOCKERFILE}"
-            --target "${stage}"
-            --tag "${push_tag}"
-        )
-        [ -n "${PLATFORMS}" ] && args+=(--platform "${PLATFORMS}")
+        if [ -n "${PLATFORMS}" ]; then
+            # Multi-arch: needs docker-container driver + QEMU + cert injection
+            setup_multiarch_builder
+            local args=(
+                --file "${DOCKERFILE}"
+                --target "${stage}"
+                --tag "${push_tag}"
+                --platform "${PLATFORMS}"
+            )
+        else
+            # Single-arch: use docker driver (reads /etc/docker/certs.d/ natively)
+            ensure_ca_cert
+            local args=(
+                --file "${DOCKERFILE}"
+                --target "${stage}"
+                --tag "${push_tag}"
+            )
+            # Ensure buildx uses the default docker driver
+            docker buildx use default 2>/dev/null || true
+        fi
 
         log "Pushing to: ${push_tag}"
         docker buildx build "${args[@]}" --push .
@@ -212,11 +233,6 @@ main() {
     info "Push       : ${PUSH}"
     [ "$PUSH" = "true" ] && info "Registry   : ${REPO}-<stage>:${PUSH_TAG}"
     echo ""
-
-    # Setup builder once for push mode (inject cert before building)
-    if [ "$PUSH" = "true" ]; then
-        setup_builder
-    fi
 
     for stage in "${targets[@]}"; do
         build_stage "${stage}"
