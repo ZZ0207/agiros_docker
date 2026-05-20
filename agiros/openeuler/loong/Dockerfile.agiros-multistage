@@ -61,7 +61,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     set -euxo pipefail; \
     dnf -y install --setopt=install_weak_deps=0 \
         bash ca-certificates curl wget git which findutils sudo; \
-    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+    dnf clean all; rm -rf /tmp/* /var/tmp/*
 
 # --- 配置 AGIROS 仓库 ---
 RUN set -euxo pipefail; \
@@ -92,7 +92,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     wget -q "$OPENCV_URL"; \
     dnf -y install "./${OPENCV_RPM}"; \
     rm -f "./${OPENCV_RPM}"; \
-    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+    dnf clean all; rm -rf /tmp/* /var/tmp/*
 
 # --- QEMU ldconfig 修复 ---
 COPY agiros/openeuler/loong/qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
@@ -105,7 +105,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     qemu-ldconfig-fix enable; \
     trap 'qemu-ldconfig-fix disable' EXIT; \
     dnf -y install agiros-loong-ros-base; \
-    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+    dnf clean all; rm -rf /tmp/* /var/tmp/*
 
 # --- 创建用户 + 环境 ---
 RUN set -euxo pipefail; \
@@ -164,7 +164,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
         colcon-common-extensions colcon-mixin colcon-ros \
         vcstool catkin_pkg lark pyyaml pytest \
         distro argcomplete pytest-repeat pytest-rerunfailures; \
-    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+    dnf clean all; rm -rf /tmp/* /var/tmp/*
 
 RUN bash -c "set +u; source ${AGIROS_INSTALL_BASE}/setup.bash 2>/dev/null || true; set -u; \
     if ! command -v agirosdep &> /dev/null; then \
@@ -192,7 +192,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     trap 'qemu-ldconfig-fix disable' EXIT; \
     dnf -y install agiros-loong-desktop || true; \
     dnf -y --fixbroken install || true; \
-    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+    dnf clean all; rm -rf /tmp/* /var/tmp/*
 
 USER ${USERNAME}
 
@@ -210,6 +210,6 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     trap 'qemu-ldconfig-fix disable' EXIT; \
     dnf -y install agiros-loong-desktop-full || true; \
     dnf -y --fixbroken install || true; \
-    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+    dnf clean all; rm -rf /tmp/* /var/tmp/*
 
 USER ${USERNAME}

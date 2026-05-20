@@ -1,3 +1,4 @@
+##用于在ubuntu的基础docker镜像中验证相关的安装命令
 #!/bin/bash
 set -euxo pipefail
 
