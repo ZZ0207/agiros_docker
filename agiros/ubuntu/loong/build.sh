@@ -25,6 +25,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 计算到仓库根目录的相对路径
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 DOCKERFILE="${SCRIPT_DIR}/Dockerfile.agiros-multistage"
 ALL_TARGETS=("base" "dev" "desktop" "desktop-full")
 
@@ -209,13 +211,13 @@ build_stage() {
         fi
 
         log "Pushing to: ${push_tag}"
-        docker buildx build "${args[@]}" --push .
+        docker buildx build "${args[@]}" --push "${REPO_ROOT}"
         log "Pushed: ${push_tag}"
     else
         local args=(-f "${DOCKERFILE}" --target "${stage}" -t "${local_tag}")
         [ -n "${PLATFORMS}" ] && args+=(--platform "${PLATFORMS}")
 
-        docker build "${args[@]}" .
+        docker build "${args[@]}" "${REPO_ROOT}"
         log "Built: ${local_tag}"
     fi
 }

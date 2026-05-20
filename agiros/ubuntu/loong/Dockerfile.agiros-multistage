@@ -78,7 +78,7 @@ deb [arch=${TARGETARCH} signed-by=/usr/share/keyrings/agiros.gpg] ${AGIROS_REPO_
 EOF
 
 # 必须在 AGIROS 安装之前创建，供 base 和后续 stages 使用
-COPY qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
+COPY agiros/ubuntu/loong/qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
 RUN chmod +x /usr/local/bin/qemu-ldconfig-fix
 
 # --- 安装 AGIROS Loong Base ---
