@@ -1,0 +1,216 @@
+#
+# openEuler 24.03 + AGIROS Loong
+# Multi-stage build: base → dev → desktop → desktop-full
+#
+# Build:
+#   docker build --target base         -t agiros:openeuler-loong-base         -f Dockerfile.agiros-multistage .
+#   docker build --target dev          -t agiros:openeuler-loong-dev          -f Dockerfile.agiros-multistage .
+#   docker build --target desktop      -t agiros:openeuler-loong-desktop      -f Dockerfile.agiros-multistage .
+#   docker build --target desktop-full -t agiros:openeuler-loong-desktop-full -f Dockerfile.agiros-multistage .
+#
+# Multi-arch:
+#   docker buildx build --platform linux/amd64,linux/arm64,linux/riscv64 \
+#     --target base -t agiros:openeuler-loong-base -f Dockerfile.agiros-multistage .
+
+# =============================================================================
+# 全局 ARG（仅用于 FROM 行，不会传递到阶段内部）
+# =============================================================================
+ARG OPENEULER_TAG=24.03-lts
+ARG USERNAME=ros
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG ROS_DISTRO=loong
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
+ARG AGIROS_REPO_URL=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts
+
+# =============================================================================
+# Stage 1: BASE（最小运行环境）
+# =============================================================================
+FROM openeuler/openeuler:${OPENEULER_TAG} AS base
+
+SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
+
+ARG TARGETARCH
+ARG USERNAME
+ARG USER_UID
+ARG USER_GID
+ARG ROS_DISTRO
+ARG AGIROS_INSTALL_BASE
+ARG AGIROS_REPO_URL
+ARG AGIROS_VERSION=2606
+ARG RELEASE_TYPE=release
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ROS_DISTRO=${ROS_DISTRO} \
+    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
+
+# 架构映射
+RUN case "${TARGETARCH}" in \
+        amd64)   echo "x86_64"  > /tmp/arch ;; \
+        arm64)   echo "aarch64" > /tmp/arch ;; \
+        riscv64) echo "riscv64" > /tmp/arch ;; \
+        *)       echo "unsupported: ${TARGETARCH}"; exit 1 ;; \
+    esac
+
+# --- 系统基础工具链 ---
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    set -euxo pipefail; \
+    dnf -y install --setopt=install_weak_deps=0 \
+        bash ca-certificates curl wget git which findutils sudo; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+# --- 配置 AGIROS 仓库 ---
+RUN set -euxo pipefail; \
+    repo_arch=$(cat /tmp/arch); \
+    tee /etc/yum.repos.d/agiros.repo >/dev/null <<EOF
+[agiros-main-packages]
+name=agiros-main-packages
+baseurl=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/${RELEASE_TYPE}
+enabled=1
+gpgcheck=0
+
+[agiros-third-packages]
+name=agiros-third-packages
+baseurl=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/3-party
+enabled=1
+gpgcheck=0
+EOF
+
+# --- 更新缓存并安装 OpenCV ---
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    set -euxo pipefail; \
+    dnf clean all; \
+    dnf -y makecache; \
+    repo_arch=$(cat /tmp/arch); \
+    OPENCV_RPM="opencv-4.5.2-9.oe2403.${repo_arch}.rpm"; \
+    OPENCV_URL="http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/3-party/${OPENCV_RPM}"; \
+    wget -q "$OPENCV_URL"; \
+    dnf -y install "./${OPENCV_RPM}"; \
+    rm -f "./${OPENCV_RPM}"; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+# --- QEMU ldconfig 修复 ---
+COPY agiros/openeuler/loong/qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
+RUN chmod +x /usr/local/bin/qemu-ldconfig-fix
+
+# --- 安装 AGIROS Loong Base ---
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
+    trap 'qemu-ldconfig-fix disable' EXIT; \
+    dnf -y install agiros-loong-ros-base; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+# --- 创建用户 + 环境 ---
+RUN set -euxo pipefail; \
+    groupadd --gid ${USER_GID} ${USERNAME}; \
+    useradd --uid ${USER_UID} --gid ${USER_GID} \
+        --shell /bin/bash --home-dir /home/${USERNAME} --create-home ${USERNAME}; \
+    mkdir -p /etc/sudoers.d; \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}; \
+    chmod 0440 /etc/sudoers.d/${USERNAME}; \
+    mkdir -p /workspace/src; \
+    chown -R ${USERNAME}:${USERNAME} /workspace /home/${USERNAME}; \
+    echo "source ${AGIROS_INSTALL_BASE}/setup.bash" >> /etc/bashrc; \
+    { \
+        echo ""; \
+        echo "# AGIROS Loong Environment"; \
+        echo "export PATH=${AGIROS_INSTALL_BASE}:\$PATH"; \
+        echo "source ${AGIROS_INSTALL_BASE}/setup.bash"; \
+        echo "cd /workspace"; \
+    } >> /home/${USERNAME}/.bashrc; \
+    chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.bashrc
+
+# --- Entrypoint ---
+COPY <<'EOF' /ros_entrypoint.sh
+#!/bin/bash
+set -e
+[ -f "${AGIROS_INSTALL_BASE}/setup.bash" ] && source "${AGIROS_INSTALL_BASE}/setup.bash"
+[ -f "/workspace/install/setup.bash" ] && source /workspace/install/setup.bash
+exec "$@"
+EOF
+
+RUN chmod +x /ros_entrypoint.sh
+
+USER ${USERNAME}
+WORKDIR /workspace
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["/bin/bash"]
+
+# =============================================================================
+# Stage 2: DEV（base + 开发工具链）
+# =============================================================================
+FROM base AS dev
+
+USER root
+
+ARG AGIROS_INSTALL_BASE
+ARG USERNAME
+
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    set -euxo pipefail; \
+    dnf -y install --setopt=install_weak_deps=0 \
+        tar make cmake ninja-build gcc gcc-c++ pkgconf-pkg-config \
+        python3 python3-pip python3-devel python3-numpy; \
+    pip3 install --no-cache-dir --break-system-packages \
+        pip setuptools wheel \
+        colcon-common-extensions colcon-mixin colcon-ros \
+        vcstool catkin_pkg lark pyyaml pytest \
+        distro argcomplete pytest-repeat pytest-rerunfailures; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+RUN bash -c "set +u; source ${AGIROS_INSTALL_BASE}/setup.bash 2>/dev/null || true; set -u; \
+    if ! command -v agirosdep &> /dev/null; then \
+      pip3 install --no-cache-dir --break-system-packages \
+        http://repo.agiros.org.cn/yumrepo/agiros/agirosdep/agirosdep-0.25.1-py3-none-any.whl; \
+    fi; \
+    agirosdep init 2>/dev/null || true; \
+    agirosdep update || true"
+
+RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /etc/bashrc
+
+USER ${USERNAME}
+
+# =============================================================================
+# Stage 3: DESKTOP
+# =============================================================================
+FROM dev AS desktop
+
+USER root
+
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
+    trap 'qemu-ldconfig-fix disable' EXIT; \
+    dnf -y install agiros-loong-desktop || true; \
+    dnf -y --fixbroken install || true; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+USER ${USERNAME}
+
+# =============================================================================
+# Stage 4: DESKTOP-FULL
+# =============================================================================
+FROM desktop AS desktop-full
+
+USER root
+
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
+    trap 'qemu-ldconfig-fix disable' EXIT; \
+    dnf -y install agiros-loong-desktop-full || true; \
+    dnf -y --fixbroken install || true; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+USER ${USERNAME}
