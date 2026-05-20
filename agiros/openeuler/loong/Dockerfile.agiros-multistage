@@ -48,51 +48,44 @@ ENV LANG=C.UTF-8 \
     ROS_DISTRO=${ROS_DISTRO} \
     AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
 
-# 架构映射
-RUN case "${TARGETARCH}" in \
-        amd64)   echo "x86_64"  > /tmp/arch ;; \
-        arm64)   echo "aarch64" > /tmp/arch ;; \
-        *)       echo "unsupported: ${TARGETARCH}"; exit 1 ;; \
-    esac
-
 # --- 系统基础工具链 ---
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     set -euxo pipefail; \
+    \
+    case "${TARGETARCH}" in \
+        amd64)   repo_arch="x86_64" ;; \
+        arm64)   repo_arch="aarch64" ;; \
+        *)       echo "unsupported: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    echo "Building for architecture: ${repo_arch}"; \
+    \
     dnf -y install --setopt=install_weak_deps=0 \
         bash ca-certificates curl wget git which findutils sudo; \
-    dnf clean all; rm -rf /tmp/* /var/tmp/*
-
-# --- 配置 AGIROS 仓库 ---
-RUN set -euxo pipefail; \
-    repo_arch=$(cat /tmp/arch); \
-    tee /etc/yum.repos.d/agiros.repo >/dev/null <<EOF
-[agiros-main-packages]
-name=agiros-main-packages
-baseurl=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/${RELEASE_TYPE}
-enabled=1
-gpgcheck=0
-
-[agiros-third-packages]
-name=agiros-third-packages
-baseurl=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/3-party
-enabled=1
-gpgcheck=0
-EOF
-
-# --- 更新缓存并安装 OpenCV ---
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    set -euxo pipefail; \
+    \
+    printf '%s\n' \
+        '[agiros-main-packages]' \
+        'name=agiros-main-packages' \
+        "baseurl=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/${RELEASE_TYPE}" \
+        'enabled=1' \
+        'gpgcheck=0' \
+        '' \
+        '[agiros-third-packages]' \
+        'name=agiros-third-packages' \
+        "baseurl=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/3-party" \
+        'enabled=1' \
+        'gpgcheck=0' \
+        > /etc/yum.repos.d/agiros.repo; \
+    \
     dnf clean all; \
     dnf -y makecache; \
-    repo_arch=$(cat /tmp/arch); \
     OPENCV_RPM="opencv-4.5.2-9.oe2403.${repo_arch}.rpm"; \
     OPENCV_URL="http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts/${AGIROS_VERSION}/${repo_arch}/3-party/${OPENCV_RPM}"; \
     wget -q "$OPENCV_URL"; \
     dnf -y install "./${OPENCV_RPM}"; \
     rm -f "./${OPENCV_RPM}"; \
-    dnf clean all; rm -rf /tmp/* /var/tmp/*
+    dnf clean all; \
+    rm -rf /tmp/* /var/tmp/*
 
 # --- QEMU ldconfig 修复 ---
 COPY agiros/openeuler/loong/qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
