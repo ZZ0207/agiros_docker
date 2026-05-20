@@ -76,6 +76,26 @@ on:
         required: false
         default: false
         type: boolean
+      build_agiros_loong_openeuler_base:
+        description: 'Build agiros-loong-openeuler-base (multistage)'
+        required: false
+        default: false
+        type: boolean
+      build_agiros_loong_openeuler_dev:
+        description: 'Build agiros-loong-openeuler-dev (multistage)'
+        required: false
+        default: false
+        type: boolean
+      build_agiros_loong_openeuler_desktop:
+        description: 'Build agiros-loong-openeuler-desktop (multistage)'
+        required: false
+        default: false
+        type: boolean
+      build_agiros_loong_openeuler_desktop_full:
+        description: 'Build agiros-loong-openeuler-desktop-full (multistage)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -106,6 +126,31 @@ jobs:
             platforms: linux/amd64,linux/arm64,linux/riscv64
             image: docker.agiros.org.cn/agiros/ros2-humble-openeuler
             input: build_ros2_humble_openeuler
+          # ======== Loong multistage openEuler (amd64 + arm64 + riscv64) ========
+          - id: agiros-loong-openeuler-base
+            dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
+            target: base
+            platforms: linux/amd64,linux/arm64,linux/riscv64
+            image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-base
+            input: build_agiros_loong_openeuler_base
+          - id: agiros-loong-openeuler-dev
+            dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
+            target: dev
+            platforms: linux/amd64,linux/arm64,linux/riscv64
+            image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-dev
+            input: build_agiros_loong_openeuler_dev
+          - id: agiros-loong-openeuler-desktop
+            dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
+            target: desktop
+            platforms: linux/amd64,linux/arm64,linux/riscv64
+            image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-desktop
+            input: build_agiros_loong_openeuler_desktop
+          - id: agiros-loong-openeuler-desktop-full
+            dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
+            target: desktop-full
+            platforms: linux/amd64,linux/arm64,linux/riscv64
+            image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-desktop-full
+            input: build_agiros_loong_openeuler_desktop_full
           # ==================== Ubuntu (amd64 + arm64) ====================
           - id: agiros-loong-ubuntu
             dockerfile: agiros/ubuntu/Dockerfile-jammy
@@ -172,6 +217,10 @@ jobs:
             build_agiros_loong_ubuntu_dev)         val="${{ inputs.build_agiros_loong_ubuntu_dev }}" ;;
             build_agiros_loong_ubuntu_desktop)     val="${{ inputs.build_agiros_loong_ubuntu_desktop }}" ;;
             build_agiros_loong_ubuntu_desktop_full) val="${{ inputs.build_agiros_loong_ubuntu_desktop_full }}" ;;
+            build_agiros_loong_openeuler_base)        val="${{ inputs.build_agiros_loong_openeuler_base }}" ;;
+            build_agiros_loong_openeuler_dev)         val="${{ inputs.build_agiros_loong_openeuler_dev }}" ;;
+            build_agiros_loong_openeuler_desktop)     val="${{ inputs.build_agiros_loong_openeuler_desktop }}" ;;
+            build_agiros_loong_openeuler_desktop_full) val="${{ inputs.build_agiros_loong_openeuler_desktop_full }}" ;;
             *) val="false" ;;
           esac
           echo "should_build=$val" >> $GITHUB_OUTPUT
@@ -184,25 +233,38 @@ jobs:
           sudo mkdir -p "${CERT_DIR}"
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee "${CERT_DIR}/ca.crt" > /dev/null
 
+          # 同时注入系统 CA 库，解决 docker CLI OAuth TLS 验证
+          echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/harbor-ca.crt > /dev/null
+          sudo update-ca-certificates
+          
+          # 验证注入成功
+          openssl x509 -in /usr/local/share/ca-certificates/harbor-ca.crt -noout -subject
+          
       - name: Set up QEMU
         if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-qemu-action@v3
+
+      - name: Build custom BuildKit image with Harbor CA cert
+        if: steps.check_dispatch.outputs.should_build == 'true'
+        run: |
+          mkdir -p /tmp/buildkit-img
+          echo "${{ secrets.HARBOR_CA_CERT }}" > /tmp/buildkit-img/harbor-ca.crt
+          cat > /tmp/buildkit-img/Dockerfile << 'DEOF'
+          FROM moby/buildkit:buildx-stable-1
+          USER root
+          COPY harbor-ca.crt /tmp/harbor-ca.crt
+          RUN cat /tmp/harbor-ca.crt >> /etc/ssl/certs/ca-certificates.crt && rm /tmp/harbor-ca.crt
+          DEOF
+          docker build -t buildkit-harbor /tmp/buildkit-img/
 
       - name: Set up Docker Buildx
         if: steps.check_dispatch.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
-          driver-opts: network=host
-
-      - name: Inject Harbor CA cert into BuildKit system trust store
-        if: steps.check_dispatch.outputs.should_build == 'true'
-        run: |
-          CONTAINER=$(docker ps --filter "name=buildx_buildkit_" --format "{{.Names}}" | head -1)
-          echo "BuildKit container: $CONTAINER"
-          # Append CA cert to the Alpine system cert bundle (Go TLS uses this)
-          echo "${{ secrets.HARBOR_CA_CERT }}" | docker exec -i "$CONTAINER" tee -a /etc/ssl/certs/ca-certificates.crt > /dev/null
-          echo "CA cert appended to system trust store"
+          driver-opts: |
+            image=buildkit-harbor
+            network=host
 
       - name: Login to Harbor Registry
         if: steps.check_dispatch.outputs.should_build == 'true'

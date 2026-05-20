@@ -58,27 +58,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=${AGIROS_INSTALL_BASE}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # --- 系统基础 ---
-# QEMU workaround: ldconfig crashes under cross-arch emulation (e.g. arm64 on amd64),
-# causing libc-bin postinst triggers to fail with SIGSEGV. Temporarily replace
-# ldconfig with a no-op during apt-get install, restore it afterward.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
     ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \
     echo "Asia/Shanghai" > /etc/timezone; \
-    if [ "${TARGETARCH}" != "amd64" ]; then \
-        cp -a /usr/sbin/ldconfig /usr/sbin/ldconfig.real; \
-        printf '#!/bin/sh\nexit 0\n' > /usr/sbin/ldconfig; \
-        chmod +x /usr/sbin/ldconfig; \
-    fi; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates curl dirmngr gnupg2 tzdata \
         devscripts python3-all dh-python \
         git wget vim-tiny less htop sudo; \
-    if [ "${TARGETARCH}" != "amd64" ]; then \
-        mv /usr/sbin/ldconfig.real /usr/sbin/ldconfig; \
-    fi; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # --- 添加 AGIROS APT 源 ---
@@ -88,13 +77,19 @@ RUN set -euxo pipefail; \
 deb [arch=${TARGETARCH} signed-by=/usr/share/keyrings/agiros.gpg] ${AGIROS_REPO_URL} jammy main
 EOF
 
+# 必须在 AGIROS 安装之前创建，供 base 和后续 stages 使用
+COPY qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
+RUN chmod +x /usr/local/bin/qemu-ldconfig-fix
+
 # --- 安装 AGIROS Loong Base ---
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
     apt-get update; \
     apt-get install -y --no-install-recommends agiros-loong-ros-base; \
     apt-get -f install -y || true; \
+    qemu-ldconfig-fix disable; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # --- 创建用户 + 环境 ---
@@ -149,6 +144,7 @@ ARG USERNAME
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         python3-colcon-common-extensions \
@@ -172,6 +168,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     agirosdep init 2>/dev/null || true; \
     agirosdep update 2>/dev/null || true; \
     \
+    qemu-ldconfig-fix disable; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" \
@@ -190,10 +187,12 @@ USER root
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         agiros-loong-desktop || true; \
     apt-get -f install -y || true; \
+    qemu-ldconfig-fix disable; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 USER ${USERNAME}
@@ -209,10 +208,12 @@ USER root
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
+    qemu-ldconfig-fix enable; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         agiros-loong-desktop-full || true; \
     apt-get -f install -y || true; \
+    qemu-ldconfig-fix disable; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 USER ${USERNAME}

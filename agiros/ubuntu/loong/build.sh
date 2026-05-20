@@ -154,19 +154,25 @@ setup_multiarch_builder() {
             --driver docker-container \
             --driver-opt network=host \
             --use
+    fi
 
-        # Inject CA cert into builder's system trust store
-        sleep 3
-        local cid
-        cid=$(docker ps --filter "name=buildx_buildkit_${builder_name}" --format "{{.Names}}" | head -1)
-        if [ -n "${cid}" ]; then
-            local cert_src="/etc/docker/certs.d/${REGISTRY}/ca.crt"
-            docker exec -i "$cid" tee -a /etc/ssl/certs/ca-certificates.crt < "${cert_src}" > /dev/null
-            log "Harbor CA cert injected into builder"
-        else
-            err "Builder container not found — cannot inject CA cert"
-            exit 1
-        fi
+    # Bootstrap to start the buildkit container (handles new + previously-created but inactive)
+    docker buildx inspect --bootstrap "${builder_name}" > /dev/null 2>&1
+
+    # Inject CA cert into builder's system trust store (skip if already injected)
+    local cid
+    cid=$(docker ps --filter "name=buildx_buildkit_${builder_name}" --format "{{.Names}}" | head -1)
+    if [ -z "${cid}" ]; then
+        err "Builder container not found — cannot inject CA cert"
+        exit 1
+    fi
+
+    if docker exec "$cid" grep -q "Harbor" /etc/ssl/certs/ca-certificates.crt 2>/dev/null; then
+        log "Harbor CA cert already present in builder"
+    else
+        local cert_src="/etc/docker/certs.d/${REGISTRY}/ca.crt"
+        docker exec -i "$cid" tee -a /etc/ssl/certs/ca-certificates.crt < "${cert_src}" > /dev/null
+        log "Harbor CA cert injected into builder"
     fi
 }
 
