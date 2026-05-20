@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.4
-#
 # Ubuntu Jammy (22.04) + AGIROS Loong
 # Multi-stage build: base → dev → desktop → desktop-full
 #

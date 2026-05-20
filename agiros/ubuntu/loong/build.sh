@@ -26,7 +26,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 计算到仓库根目录的相对路径
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+# 用 git 确定仓库根目录
+if git -C "${SCRIPT_DIR}" rev-parse --show-toplevel &>/dev/null; then
+    REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
+else
+    # fallback：手动指定或报错
+    REPO_ROOT="${REPO_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+fi
+
 DOCKERFILE="${SCRIPT_DIR}/Dockerfile.agiros-multistage"
 ALL_TARGETS=("base" "dev" "desktop" "desktop-full")
 
