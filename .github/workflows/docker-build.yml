@@ -26,75 +26,45 @@ on:
 #      - 'src/**'
   workflow_dispatch:
     inputs:
-      build_agiros_loong_openeuler:
-        description: 'Build agiros-loong-openeuler'
-        required: false
-        default: true
-        type: boolean
-      build_ros2_humble_openeuler:
-        description: 'Build ros2-humble-openeuler'
-        required: false
-        default: true
-        type: boolean
-      build_agiros_loong_ubuntu:
-        description: 'Build agiros-loong-ubuntu'
-        required: false
-        default: true
-        type: boolean
-      build_agiros_unitree_ubuntu:
-        description: 'Build agiros-unitree-ubuntu'
-        required: false
-        default: true
-        type: boolean
-      build_ros2_foxy_ubuntu:
-        description: 'Build ros2-foxy-ubuntu'
-        required: false
-        default: true
-        type: boolean
-      build_ros2_humble_ubuntu:
-        description: 'Build ros2-humble-ubuntu'
-        required: false
-        default: true
-        type: boolean
       build_agiros_loong_ubuntu_base:
         description: 'Build agiros-loong-ubuntu-base (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_ubuntu_dev:
         description: 'Build agiros-loong-ubuntu-dev (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_ubuntu_desktop:
         description: 'Build agiros-loong-ubuntu-desktop (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_ubuntu_desktop_full:
         description: 'Build agiros-loong-ubuntu-desktop-full (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_openeuler_base:
         description: 'Build agiros-loong-openeuler-base (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_openeuler_dev:
         description: 'Build agiros-loong-openeuler-dev (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_openeuler_desktop:
         description: 'Build agiros-loong-openeuler-desktop (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
       build_agiros_loong_openeuler_desktop_full:
         description: 'Build agiros-loong-openeuler-desktop-full (multistage)'
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
@@ -109,23 +79,12 @@ jobs:
   build-images:
     name: ${{ matrix.id }}
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 480
     if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ==================== openEuler (amd64 + arm64 + riscv64) ====================
-          - id: agiros-loong-openeuler
-            dockerfile: agiros/openeuler/Dockerfile-openeuler-loong
-            platforms: linux/amd64,linux/arm64
-            image: docker.agiros.org.cn/agiros/agiros-loong-openeuler
-            input: build_agiros_loong_openeuler
-          - id: ros2-humble-openeuler
-            dockerfile: ros2/openeuler/Dockerfile-openeuler-humble
-            platforms: linux/amd64,linux/arm64
-            image: docker.agiros.org.cn/agiros/ros2-humble-openeuler
-            input: build_ros2_humble_openeuler
           # ======== Loong multistage openEuler (amd64 + arm64 + riscv64) ========
           - id: agiros-loong-openeuler-base
             dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
@@ -151,27 +110,6 @@ jobs:
             platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-desktop-full
             input: build_agiros_loong_openeuler_desktop_full
-          # ==================== Ubuntu (amd64 + arm64) ====================
-          - id: agiros-loong-ubuntu
-            dockerfile: agiros/ubuntu/Dockerfile-jammy
-            platforms: linux/amd64,linux/arm64
-            image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu
-            input: build_agiros_loong_ubuntu
-          - id: agiros-unitree-ubuntu
-            dockerfile: agiros/ubuntu/unitree_go2_ws/Dockerfile-multistage
-            platforms: linux/amd64,linux/arm64
-            image: docker.agiros.org.cn/agiros/agiros-unitree-ubuntu
-            input: build_agiros_unitree_ubuntu
-          - id: ros2-foxy-ubuntu
-            dockerfile: ros2/ubuntu/Dockerfile-foxy
-            platforms: linux/amd64,linux/arm64
-            image: docker.agiros.org.cn/agiros/ros2-foxy-ubuntu
-            input: build_ros2_foxy_ubuntu
-          - id: ros2-humble-ubuntu
-            dockerfile: ros2/ubuntu/Dockerfile-humble
-            platforms: linux/amd64,linux/arm64
-            image: docker.agiros.org.cn/agiros/ros2-humble-ubuntu
-            input: build_ros2_humble_ubuntu
           # ============ Loong multistage Ubuntu (amd64 + arm64) ============
           - id: agiros-loong-ubuntu-base
             dockerfile: agiros/ubuntu/loong/Dockerfile.agiros-multistage
@@ -207,12 +145,6 @@ jobs:
         id: check_dispatch
         run: |
           case "${{ matrix.input }}" in
-            build_agiros_loong_openeuler)         val="${{ inputs.build_agiros_loong_openeuler }}" ;;
-            build_ros2_humble_openeuler)           val="${{ inputs.build_ros2_humble_openeuler }}" ;;
-            build_agiros_loong_ubuntu)             val="${{ inputs.build_agiros_loong_ubuntu }}" ;;
-            build_agiros_unitree_ubuntu)           val="${{ inputs.build_agiros_unitree_ubuntu }}" ;;
-            build_ros2_foxy_ubuntu)                val="${{ inputs.build_ros2_foxy_ubuntu }}" ;;
-            build_ros2_humble_ubuntu)              val="${{ inputs.build_ros2_humble_ubuntu }}" ;;
             build_agiros_loong_ubuntu_base)        val="${{ inputs.build_agiros_loong_ubuntu_base }}" ;;
             build_agiros_loong_ubuntu_dev)         val="${{ inputs.build_agiros_loong_ubuntu_dev }}" ;;
             build_agiros_loong_ubuntu_desktop)     val="${{ inputs.build_agiros_loong_ubuntu_desktop }}" ;;
