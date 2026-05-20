@@ -52,7 +52,6 @@ ENV LANG=C.UTF-8 \
 RUN case "${TARGETARCH}" in \
         amd64)   echo "x86_64"  > /tmp/arch ;; \
         arm64)   echo "aarch64" > /tmp/arch ;; \
-        riscv64) echo "riscv64" > /tmp/arch ;; \
         *)       echo "unsupported: ${TARGETARCH}"; exit 1 ;; \
     esac
 

@@ -118,37 +118,37 @@ jobs:
           # ==================== openEuler (amd64 + arm64 + riscv64) ====================
           - id: agiros-loong-openeuler
             dockerfile: agiros/openeuler/Dockerfile-openeuler-loong
-            platforms: linux/amd64,linux/arm64,linux/riscv64
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler
             input: build_agiros_loong_openeuler
           - id: ros2-humble-openeuler
             dockerfile: ros2/openeuler/Dockerfile-openeuler-humble
-            platforms: linux/amd64,linux/arm64,linux/riscv64
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/ros2-humble-openeuler
             input: build_ros2_humble_openeuler
           # ======== Loong multistage openEuler (amd64 + arm64 + riscv64) ========
           - id: agiros-loong-openeuler-base
             dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
             target: base
-            platforms: linux/amd64,linux/arm64,linux/riscv64
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-base
             input: build_agiros_loong_openeuler_base
           - id: agiros-loong-openeuler-dev
             dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
             target: dev
-            platforms: linux/amd64,linux/arm64,linux/riscv64
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-dev
             input: build_agiros_loong_openeuler_dev
           - id: agiros-loong-openeuler-desktop
             dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
             target: desktop
-            platforms: linux/amd64,linux/arm64,linux/riscv64
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-desktop
             input: build_agiros_loong_openeuler_desktop
           - id: agiros-loong-openeuler-desktop-full
             dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
             target: desktop-full
-            platforms: linux/amd64,linux/arm64,linux/riscv64
+            platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-desktop-full
             input: build_agiros_loong_openeuler_desktop_full
           # ==================== Ubuntu (amd64 + arm64) ====================
