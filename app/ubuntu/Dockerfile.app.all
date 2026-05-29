@@ -51,12 +51,17 @@ ENV WORKSPACE=${WORKSPACE}
 
 
 # 基础工具 + AGIROS 开发工具（合并为一个 RUN 层）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    apt-get update && apt-get install -y --no-install-recommends \
     vim  \
     nano  \
     net-tools  \
     iputils-ping   \
-    && rm -rf /var/lib/apt/lists/*
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/*
 
 USER ${USERNAME}
 
@@ -103,24 +108,34 @@ ENV WORKSPACE=${WORKSPACE}
 ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
 # 系统依赖 + Python 依赖（合并为一个 RUN 层）
-RUN apt-get update && apt-get install -y --no-install-recommends   \
-  libyaml-cpp-dev   \
-  libpcap-dev   \
-  libpcl-dev   \
-  && rm -rf /var/lib/apt/lists/*   \
-  && pip3 install --no-cache-dir    \
-  numpy    \
-  scipy    \
-  opencv-python      \
-  transforms3d      \
-  pyserial       \
-  stable-baselines3
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+     apt-get update && apt-get install -y --no-install-recommends   \
+    libyaml-cpp-dev   \
+    libpcap-dev   \
+    libpcl-dev   \
+    && rm -rf /var/lib/apt/lists/*   \
+    && pip3 install --no-cache-dir    \
+    numpy    \
+    scipy    \
+    opencv-python      \
+    transforms3d      \
+    pyserial       \
+    stable-baselines3 \
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/*
 
 # 时区设置
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 # AGIROS 扩展包安装（合并为一个 RUN 层）
-RUN apt-get update && apt-get install -y --no-install-recommends   \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    apt-get update && apt-get install -y --no-install-recommends   \
     ${ROS_PREFIX}-${ROS_DISTRO}-cyclonedds   \
     ${ROS_PREFIX}-${ROS_DISTRO}-rmw-cyclonedds-cpp  \
     ${ROS_PREFIX}-${ROS_DISTRO}-navigation2   \
@@ -132,7 +147,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends   \
     ${ROS_PREFIX}-${ROS_DISTRO}-plotjuggler   \
     ${ROS_PREFIX}-${ROS_DISTRO}-cartographer  \
     ${ROS_PREFIX}-${ROS_DISTRO}-xacro   \
-    && rm -rf /var/lib/apt/lists/*
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/*
 
 # 创建工作空间并设置权限
 RUN mkdir -p ${WORKSPACE}/unitree/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
@@ -146,17 +162,27 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc
 COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/unitree/src
 
 # 构建 cyclonedds_ws
-RUN cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws   \
-     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash   \
-     && colcon build  --parallel-workers ${PARALLEL_JOBS}    \
-     && source install/setup.bash
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws   \
+    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash   \
+    && colcon build  --parallel-workers ${PARALLEL_JOBS}    \
+    && source install/setup.bash \
+    qemu-ldconfig-fix disable;
 
 # 构建 dog-bot 源码
-RUN cd ${WORKSPACE}/unitree    \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    cd ${WORKSPACE}/unitree    \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash    \
     && unset PYTHONDONTWRITEBYTECODE    \
     && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS}   \
-    && source install/setup.bash
+    && source install/setup.bash \
+    qemu-ldconfig-fix disable;
 
 # Entrypoint 脚本（使用 RUN cat > 确保变量正确展开）
 USER root

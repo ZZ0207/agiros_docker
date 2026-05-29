@@ -23,6 +23,11 @@ ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 ARG AGIROS_REPO_URL=http://repo.agiros.org.cn/debrepo/agiros/ubuntu2204lts/2606
 ARG AGIROS_GPG_URL=${AGIROS_REPO_URL}/agiros.gpg
 
+# 全局构建参数（用于 LABEL）
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG IMAGE_TAG=2606
+
 # =============================================================================
 # Stage 1: BASE (最小运行环境)
 # =============================================================================
@@ -39,6 +44,25 @@ ARG ROS_DISTRO
 ARG AGIROS_INSTALL_BASE
 ARG AGIROS_REPO_URL
 ARG AGIROS_GPG_URL
+
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG UBUNTU_TAG
+ARG IMAGE_TAG
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS Base Image for ubuntu"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for ubuntu."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="ubuntu:${UBUNTU_TAG}"
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
