@@ -11,11 +11,24 @@
 # Multi-arch:
 #   docker buildx build --platform linux/amd64,linux/arm64,linux/riscv64 \
 #     --target base -t agiros:openeuler-loong-base -f Dockerfile.agiros-multistage .
+#
+# cd ~/work/code/docker_ws/unitree_go2_docker/unitree-go2-docker
+# docker buildx use agiros-builder
+# docker buildx build \
+#   --build-arg LOCAL_IMAGE="localhost:5000/openeuler/openeuler" \
+#   --build-arg OPENEULER_TAG="24.03-lts-riscv64" \
+#   --build-arg TARGETARCH=riscv64 \
+#   --target base \
+#   -t agiros:openeuler-riscv64-base \
+#   --load \
+#   -f agiros/openeuler/loong/Dockerfile.agiros-multistage .
 
 # =============================================================================
 # 全局 ARG（仅用于 FROM 行，不会传递到阶段内部）
 # =============================================================================
 ARG OPENEULER_TAG=24.03-lts
+ARG LOCAL_IMAGE=openeuler/openeuler
+ARG LOCAL_REGISTRY=""
 ARG USERNAME=ros
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -26,7 +39,7 @@ ARG AGIROS_REPO_URL=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts
 # =============================================================================
 # Stage 1: BASE（最小运行环境）
 # =============================================================================
-FROM openeuler/openeuler:${OPENEULER_TAG} AS base
+FROM ${LOCAL_REGISTRY}${LOCAL_IMAGE}:${OPENEULER_TAG} AS base
 
 SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
 
@@ -48,6 +61,8 @@ ENV LANG=C.UTF-8 \
     ROS_DISTRO=${ROS_DISTRO} \
     AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
 
+RUN ldconfig
+
 # --- 系统基础工具链 ---
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
@@ -56,6 +71,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     case "${TARGETARCH}" in \
         amd64)   repo_arch="x86_64" ;; \
         arm64)   repo_arch="aarch64" ;; \
+        riscv64) repo_arch="riscv64" ;; \
         *)       echo "unsupported: ${TARGETARCH}"; exit 1 ;; \
     esac; \
     echo "Building for architecture: ${repo_arch}"; \

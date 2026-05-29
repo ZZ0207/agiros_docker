@@ -1,0 +1,11 @@
+##包含所有应用的app docker镜像
+##
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG ROS_DISTRO=foxy
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
+
+# Use official ros image (ros:foxy points to ros-foxy-ros-base-focal)
+# This supports both amd64 and arm64v8 architectures
+FROM ros:foxy-ros-base-focal

@@ -1,0 +1,194 @@
+## 包含所有应用的 app docker 镜像
+## 基础镜像: docker pull docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-ubuntu-desktop:2606
+
+##各个阶段规划
+# Stage 1: base      → 基础环境（中间层）
+# Stage 2: unitree   → 四足机器人（最终发布）
+# Stage 3: ur5       → 机械臂（最终发布）
+# Stage 4: wheeltec  → 轮趣小车（最终发布）
+# Stage 5: uav       → 无人机（最终发布）
+
+# =============================================================================
+# 全局构建参数
+# =============================================================================
+ARG ROS_DISTRO=loong
+ARG ROS_PREFIX=agiros
+ARG WORKSPACE=/workspace/app
+ARG USERNAME=ros
+ARG IMAGE_TAG=2606
+ARG NETWORK_INTERFACE_NAME=wlp0s20f3
+ARG OS=openeuler
+ARG PARALLEL_JOBS=1
+
+
+# =============================================================================
+# Stage 1: BASE (最小运行环境)
+# =============================================================================
+FROM docker.agiros.org.cn/${ROS_PREFIX}/${ROS_PREFIX}-${ROS_DISTRO}-${OS}-desktop:${IMAGE_TAG} AS base
+
+SHELL ["/bin/bash", "-exo", "pipefail", "-c"]
+
+# Docker Buildx 自动注入的目标架构变量
+ARG TARGETARCH
+ARG TARGETPLATFORM
+
+USER root
+
+# 重新声明需要的 ARG
+ARG ROS_DISTRO
+ARG ROS_PREFIX
+ARG USERNAME
+ARG WORKSPACE
+ARG NETWORK_INTERFACE_NAME
+
+# 全局构建参数（用于 LABEL）
+ARG BUILD_DATE
+ARG GIT_COMMIT
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENV WORKSPACE=${WORKSPACE}
+ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
+
+# openEuler 基础工具 + AGIROS 开发工具
+RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+    vim \
+    nano \
+    net-tools \
+    iputils-ping \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    gcc \
+    gcc-c++ \
+    cmake \
+    make \
+    git \
+    && dnf clean all \
+    && rm -rf /tmp/* /var/tmp/*
+USER ${USERNAME}
+
+
+# =============================================================================
+# Stage 2: unitree app (完整应用环境)
+# =============================================================================
+FROM base AS unitree
+
+SHELL ["/bin/bash", "-exo", "pipefail", "-c"]
+
+ARG TARGETARCH
+ARG TARGETPLATFORM
+
+USER root
+
+# 重新声明所有需要的 ARG
+ARG ROS_DISTRO
+ARG ROS_PREFIX
+ARG USERNAME
+ARG WORKSPACE
+ARG NETWORK_INTERFACE_NAME
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG PARALLEL_JOBS
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS Unitree Go2 Application"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} application image with Unitree Go2 robot support. Includes AGIROS navigation, SLAM, and gesture control."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-${OS}-desktop:${IMAGE_TAG}"
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
+
+
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENV WORKSPACE=${WORKSPACE}
+ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
+
+# openEuler 开发依赖（注意 -devel 后缀）
+RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+    libyaml-cpp-devel \
+    libpcap-devel \
+    pcl-devel \
+    python3-opencv \
+    && dnf clean all \
+    && rm -rf /tmp/* /var/tmp/* \
+    && pip3 install --no-cache-dir \
+        numpy \
+        scipy \
+        transforms3d \
+        pyserial \
+        stable-baselines3
+
+
+# 时区设置
+RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
+# AGIROS 包
+RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+    ${ROS_PREFIX}-${ROS_DISTRO}-cyclonedds \
+    ${ROS_PREFIX}-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+    ${ROS_PREFIX}-${ROS_DISTRO}-navigation2 \
+    ${ROS_PREFIX}-${ROS_DISTRO}-rosidl-generator-dds-idl \
+    ${ROS_PREFIX}-${ROS_DISTRO}-nav2-bringup \
+    ${ROS_PREFIX}-${ROS_DISTRO}-slam-toolbox \
+    ${ROS_PREFIX}-${ROS_DISTRO}-realsense2-camera \
+    ${ROS_PREFIX}-${ROS_DISTRO}-gazebo-ros-pkgs \
+    ${ROS_PREFIX}-${ROS_DISTRO}-plotjuggler \
+    ${ROS_PREFIX}-${ROS_DISTRO}-cartographer \
+    ${ROS_PREFIX}-${ROS_DISTRO}-xacro \
+    && dnf clean all \
+    && rm -rf /tmp/* /var/tmp/*
+
+
+# 创建工作空间并设置权限
+RUN mkdir -p ${WORKSPACE}/unitree/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
+
+USER ${USERNAME}
+
+# 配置用户环境（.bashrc）
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
+
+# 复制应用源码（使用 --chown 确保权限正确）
+COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/unitree/src
+
+# 构建 cyclonedds_ws
+RUN cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash    && colcon build --parallel-workers ${PARALLEL_JOBS}    && source install/setup.bash
+
+RUN cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws \
+    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
+    && colcon build --parallel-workers ${PARALLEL_JOBS} \
+    && source install/setup.bash
+
+
+# 构建 dog-bot 源码
+RUN cd ${WORKSPACE}/unitree \
+    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
+    && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} \
+    && source install/setup.bash
+
+
+# Entrypoint 脚本（使用 RUN cat > 确保变量正确展开）
+USER root
+RUN cat > /ros_entrypoint.sh <<EOF
+#!/bin/bash
+set -e
+source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
+[ -f "${WORKSPACE}/unitree/install/setup.bash" ] && source ${WORKSPACE}/unitree/install/setup.bash
+source ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI="<CycloneDDS><Domain><General><Interfaces><NetworkInterface name=\"${NETWORK_INTERFACE_NAME}\" priority=\"default\" multicast=\"default\" /></Interfaces></General></Domain></CycloneDDS>"
+exec "\$@"
+EOF
+RUN chmod +x /ros_entrypoint.sh
+
+USER ${USERNAME}
+WORKDIR ${WORKSPACE}
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]

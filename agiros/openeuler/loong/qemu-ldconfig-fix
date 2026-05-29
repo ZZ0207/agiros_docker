@@ -1,4 +1,5 @@
 #!/bin/bash
+# qemu-ldconfig-fix
 set -e
 ACTION="${1:-enable}"
 
@@ -8,8 +9,8 @@ case "$ARCH" in
     x86_64)
         exit 0  # x86_64 架构直接退出
         ;;
-    aarch64)
-        # ARM64 架构继续执行
+    aarch64|riscv64)
+        # ARM64 和 RISC-V 架构继续执行
         ;;
     *)
         echo "Unsupported architecture: $ARCH" >&2

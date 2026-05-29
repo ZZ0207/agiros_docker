@@ -1,0 +1,74 @@
+# openEuler 24.03 RISC-V 专用镜像
+FROM localhost:5000/agiros:alpine-riscv64-base AS base
+
+ARG TARGETARCH=riscv64
+ARG USERNAME=ros
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG ROS_DISTRO=loong
+ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ROS_DISTRO=${ROS_DISTRO} \
+    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
+
+# 系统基础工具链
+RUN dnf -y install --setopt=install_weak_deps=0 \
+        bash ca-certificates curl wget git which findutils sudo \
+        tar make cmake ninja-build gcc gcc-c++ pkgconf-pkg-config \
+        python3 python3-pip python3-devel python3-numpy; \
+    dnf clean all; \
+    rm -rf /tmp/* /var/tmp/*
+
+# 创建用户
+RUN groupadd --gid ${USER_GID} ${USERNAME}; \
+    useradd --uid ${USER_UID} --gid ${USER_GID} \
+        --shell /bin/bash --home-dir /home/${USERNAME} --create-home ${USERNAME}; \
+    mkdir -p /etc/sudoers.d; \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}; \
+    chmod 0440 /etc/sudoers.d/${USERNAME}; \
+    mkdir -p /workspace/src; \
+    chown -R ${USERNAME}:${USERNAME} /workspace /home/${USERNAME}; \
+    echo "cd /workspace" >> /home/${USERNAME}/.bashrc
+
+USER ${USERNAME}
+WORKDIR /workspace
+CMD ["/bin/bash"]
+
+# Dev stage
+FROM base AS dev
+USER root
+RUN pip3 install --no-cache-dir \
+        pip setuptools wheel \
+        colcon-common-extensions colcon-mixin colcon-ros \
+        vcstool catkin_pkg lark pyyaml pytest \
+        distro argcomplete pytest-repeat pytest-rerunfailures; \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /etc/bashrc
+USER ${USERNAME}
+
+# Desktop stage (minimal, without AGIROS)
+FROM dev AS desktop
+USER root
+RUN dnf -y install --setopt=install_weak_deps=0 \
+        mesa-dri-drivers xorg-x11-server-Xvfb \
+        qt5-qtbase qt5-qtbase-devel \
+        libX11 libXrandr libXinerama libXcursor \
+        libglvnd-glx || true; \
+    dnf clean all
+USER ${USERNAME}
+
+# Desktop-full stage
+FROM desktop AS desktop-full
+USER root
+RUN dnf -y install --setopt=install_weak_deps=0 \
+        firefox chromium \
+        vim emacs \
+        terminator tmux \
+        gedit evince \
+        eog shotwell || true; \
+    dnf clean all
+USER ${USERNAME}
