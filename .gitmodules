@@ -4,3 +4,7 @@
 [submodule "unitree_ros2"]
 	path = src/unitree_ros2
 	url = https://github.com/unitreerobotics/unitree_ros2
+[submodule "app_ws/unitree_dog-bot"]
+	path = app_ws/unitree_dog-bot
+	url = https://gitee.com/jhaiq/dog-bot.git
+	branch = feature/gesture-optimize
