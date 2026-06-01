@@ -154,7 +154,7 @@ USER ${USERNAME}
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 # 复制应用源码（使用 --chown 确保权限正确）
-COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/unitree/src
+COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/unitree/src
 
 # cyclonedds 构建（带编译缓存）
 RUN --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/build,uid=1000,gid=1000 \
@@ -193,3 +193,28 @@ USER ${USERNAME}
 WORKDIR ${WORKSPACE}
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
+
+
+# =============================================================================
+# Stage 3: ur5 app 
+# =============================================================================
+
+
+
+
+# =============================================================================
+# Stage 4: wheeltec app 
+# =============================================================================
+
+
+
+
+
+
+
+# =============================================================================
+# Stage 5: uav app 
+# =============================================================================
+
+
+
