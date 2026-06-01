@@ -18,7 +18,7 @@ ARG USERNAME=ros
 ARG IMAGE_TAG=2606
 ARG NETWORK_INTERFACE_NAME=wlp0s20f3
 ARG OS=ubuntu
-ARG PARALLEL_JOBS=1
+ARG PARALLEL_JOBS=4
 
 
 # =============================================================================
@@ -31,8 +31,6 @@ SHELL ["/bin/bash", "-exo", "pipefail", "-c"]
 # Docker Buildx 自动注入的目标架构变量
 ARG TARGETARCH
 ARG TARGETPLATFORM
-
-USER root
 
 # 重新声明需要的 ARG
 ARG ROS_DISTRO
@@ -49,6 +47,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENV WORKSPACE=${WORKSPACE}
 
+USER root
 
 # 基础工具 + AGIROS 开发工具（合并为一个 RUN 层）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -59,9 +58,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     vim  \
     nano  \
     net-tools  \
-    iputils-ping   \
-    qemu-ldconfig-fix disable; \
-    rm -rf /var/lib/apt/lists/*
+    iputils-ping;   \
+    qemu-ldconfig-fix disable
 
 USER ${USERNAME}
 
@@ -86,7 +84,9 @@ ARG WORKSPACE
 ARG NETWORK_INTERFACE_NAME
 ARG BUILD_DATE
 ARG GIT_COMMIT
-ARG PARALLEL_JOBS
+ARG PARALLEL_JOBS=4
+ARG IMAGE_TAG
+ARG OS
 
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
@@ -99,8 +99,6 @@ LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
 LABEL org.opencontainers.image.licenses="Proprietary"
 LABEL org.opencontainers.image.base.name="docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-${OS}-desktop:${IMAGE_TAG}"
-# 构建后可通过 skopeo 补充
-LABEL org.opencontainers.image.base.digest=""  
 
 
 ENV ROS_DISTRO=${ROS_DISTRO}
@@ -116,16 +114,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libyaml-cpp-dev   \
     libpcap-dev   \
     libpcl-dev   \
-    && rm -rf /var/lib/apt/lists/*   \
     && pip3 install --no-cache-dir    \
     numpy    \
     scipy    \
     opencv-python      \
     transforms3d      \
     pyserial       \
-    stable-baselines3 \
-    qemu-ldconfig-fix disable; \
-    rm -rf /var/lib/apt/lists/*
+    stable-baselines3; \
+    qemu-ldconfig-fix disable
 
 # 时区设置
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
@@ -146,9 +142,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ${ROS_PREFIX}-${ROS_DISTRO}-gazebo-ros-pkgs  \
     ${ROS_PREFIX}-${ROS_DISTRO}-plotjuggler   \
     ${ROS_PREFIX}-${ROS_DISTRO}-cartographer  \
-    ${ROS_PREFIX}-${ROS_DISTRO}-xacro   \
-    qemu-ldconfig-fix disable; \
-    rm -rf /var/lib/apt/lists/*
+    ${ROS_PREFIX}-${ROS_DISTRO}-xacro;   \
+    qemu-ldconfig-fix disable
 
 # 创建工作空间并设置权限
 RUN mkdir -p ${WORKSPACE}/unitree/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
@@ -161,28 +156,24 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc
 # 复制应用源码（使用 --chown 确保权限正确）
 COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/unitree/src
 
-# 构建 cyclonedds_ws
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+# cyclonedds 构建（带编译缓存）
+RUN --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/build,uid=1000,gid=1000 \
+    --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/install,uid=1000,gid=1000 \
     set -exo pipefail; \
-    qemu-ldconfig-fix enable; \
-    cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws   \
-    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash   \
-    && colcon build  --parallel-workers ${PARALLEL_JOBS}    \
-    && source install/setup.bash \
-    qemu-ldconfig-fix disable;
+    cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws \
+    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
+    && colcon build --parallel-workers ${PARALLEL_JOBS} \
+    && source install/setup.bash
 
-# 构建 dog-bot 源码
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+# dog-bot 构建（带编译缓存）
+RUN --mount=type=cache,target=${WORKSPACE}/unitree/build,uid=1000,gid=1000 \
+    --mount=type=cache,target=${WORKSPACE}/unitree/install,uid=1000,gid=1000 \
     set -exo pipefail; \
-    qemu-ldconfig-fix enable; \
-    cd ${WORKSPACE}/unitree    \
-    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash    \
-    && unset PYTHONDONTWRITEBYTECODE    \
-    && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS}   \
-    && source install/setup.bash \
-    qemu-ldconfig-fix disable;
+    cd ${WORKSPACE}/unitree \
+    && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
+    && unset PYTHONDONTWRITEBYTECODE \
+    && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} \
+    && source install/setup.bash
 
 # Entrypoint 脚本（使用 RUN cat > 确保变量正确展开）
 USER root
