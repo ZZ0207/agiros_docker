@@ -151,7 +151,7 @@ RUN mkdir -p ${WORKSPACE}/unitree/src && chown -R ${USERNAME}:${USERNAME} ${WORK
 USER ${USERNAME}
 
 # 配置用户环境（.bashrc）
-RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
+RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 # 复制应用源码（使用 --chown 确保权限正确）
 COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/unitree/src
@@ -161,6 +161,8 @@ RUN --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_w
     --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/install,uid=1000,gid=1000 \
     set -exo pipefail; \
     cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws \
+    && mkdir -p log build install \
+    && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
@@ -170,6 +172,8 @@ RUN --mount=type=cache,target=${WORKSPACE}/unitree/build,uid=1000,gid=1000 \
     --mount=type=cache,target=${WORKSPACE}/unitree/install,uid=1000,gid=1000 \
     set -exo pipefail; \
     cd ${WORKSPACE}/unitree \
+    && mkdir -p log build install \
+    && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && unset PYTHONDONTWRITEBYTECODE \
     && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} \
