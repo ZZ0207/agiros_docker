@@ -163,6 +163,26 @@ USER root
 ARG AGIROS_INSTALL_BASE
 ARG USERNAME
 
+
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG UBUNTU_TAG
+ARG IMAGE_TAG
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS devel Image for ubuntu"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for ubuntu."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="ubuntu:${UBUNTU_TAG}"
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
@@ -206,6 +226,25 @@ FROM dev AS desktop
 
 USER root
 
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG UBUNTU_TAG
+ARG IMAGE_TAG
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS desktop Image for ubuntu"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for ubuntu."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="ubuntu:${UBUNTU_TAG}"
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -euxo pipefail; \
@@ -226,6 +265,25 @@ USER ${USERNAME}
 FROM desktop AS desktop-full
 
 USER root
+
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG UBUNTU_TAG
+ARG IMAGE_TAG
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS desktop-full Image for ubuntu"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for ubuntu."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="ubuntu:${UBUNTU_TAG}"
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \

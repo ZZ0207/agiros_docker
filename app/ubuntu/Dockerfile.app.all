@@ -1,5 +1,15 @@
 ## 包含所有应用的 app docker 镜像
 ## 基础镜像: docker pull docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-ubuntu-desktop:2606
+##########################################
+#
+#  docker buildx build  \
+#     --platform linux/amd64,linux/arm64  \
+#     --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"  \
+#     --build-arg GIT_COMMIT="$(git rev-parse --short HEAD)"  \
+#     -f app/ubuntu/Dockerfile.app.all  \
+#     -t docker.agiros.org.cn/app/agiros-ubuntu-unitree-app:2606  \
+#     --push  \
+#     .
 
 ##各个阶段规划
 # Stage 1: base      → 基础环境（中间层）

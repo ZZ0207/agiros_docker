@@ -23,6 +23,16 @@
 #   --load \
 #   -f agiros/openeuler/loong/Dockerfile.agiros-multistage .
 
+# docker buildx build --platform linux/riscv64 \
+#      --build-arg LOCAL_IMAGE="docker.agiros.org.cn/os/openeuler" \
+#      --build-arg OPENEULER_TAG="24.03-lts-riscv64" \
+#      --build-arg TARGETARCH=riscv64 \
+#      --target base \
+#      --push \
+#      -t docker.agiros.org.cn/agiros/agiros-openeuler-base:2606-riscv64 \
+#      -f agiros/openeuler/loong/Dockerfile.agiros-multistage \
+#      .
+
 # =============================================================================
 # 全局 ARG（仅用于 FROM 行，不会传递到阶段内部）
 # =============================================================================
@@ -35,6 +45,11 @@ ARG USER_GID=1000
 ARG ROS_DISTRO=loong
 ARG AGIROS_INSTALL_BASE=/opt/agiros/${ROS_DISTRO}
 ARG AGIROS_REPO_URL=http://repo.agiros.org.cn/yumrepo/agiros/openeuler2403lts
+
+# 全局构建参数（用于 LABEL）
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG IMAGE_TAG=2606
 
 # =============================================================================
 # Stage 1: BASE（最小运行环境）
@@ -53,6 +68,13 @@ ARG AGIROS_REPO_URL
 ARG AGIROS_VERSION=2606
 ARG RELEASE_TYPE=release
 
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG OPENEULER_TAG
+ARG IMAGE_TAG
+ARG LOCAL_REGISTRY
+ARG LOCAL_IMAGE
+
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -62,6 +84,21 @@ ENV LANG=C.UTF-8 \
     AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
 
 RUN ldconfig
+
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS Base Image for openEuler"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for openEuler."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name=${LOCAL_REGISTRY}${LOCAL_IMAGE}:${OPENEULER_TAG}
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
 
 # --- 系统基础工具链 ---
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
@@ -78,6 +115,19 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     \
     dnf -y install --setopt=install_weak_deps=0 \
         bash ca-certificates curl wget git which findutils sudo; \
+    \
+    # === riscv64: 保留官方源，添加 everything 源补充依赖 ===
+    if [ "${TARGETARCH}" = "riscv64" ]; then \
+        # 保留原有的 openEuler.repo（OS + update 源）
+        # 添加 everything 源（包含 cmake-filesystem 等大量额外包）
+        printf '%s\n' \
+            '[openEuler-everything]' \
+            'name=openEuler-everything' \
+            'baseurl=http://repo.openeuler.org/openEuler-24.03-LTS/everything/riscv64/' \
+            'enabled=1' \
+            'gpgcheck=0' \
+            > /etc/yum.repos.d/openEuler-everything.repo; \
+    fi; \
     \
     printf '%s\n' \
         '[agiros-main-packages]' \
@@ -162,6 +212,28 @@ USER root
 ARG AGIROS_INSTALL_BASE
 ARG USERNAME
 
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG OPENEULER_TAG
+ARG IMAGE_TAG
+ARG LOCAL_REGISTRY
+ARG LOCAL_IMAGE
+
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS devel Image for openEuler"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for openEuler."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name=${LOCAL_REGISTRY}${LOCAL_IMAGE}:${OPENEULER_TAG}
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
+
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     set -euxo pipefail; \
@@ -194,6 +266,27 @@ FROM dev AS desktop
 
 USER root
 
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG OPENEULER_TAG
+ARG IMAGE_TAG
+ARG LOCAL_REGISTRY
+ARG LOCAL_IMAGE
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS desktop Image for openEuler"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for openEuler."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name=${LOCAL_REGISTRY}${LOCAL_IMAGE}:${OPENEULER_TAG}
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
+
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     set -euxo pipefail; \
@@ -211,6 +304,27 @@ USER ${USERNAME}
 FROM desktop AS desktop-full
 
 USER root
+
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG OPENEULER_TAG
+ARG IMAGE_TAG
+ARG LOCAL_REGISTRY
+ARG LOCAL_IMAGE
+
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS desktop-full Image for openEuler"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} base image for openEuler."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name=${LOCAL_REGISTRY}${LOCAL_IMAGE}:${OPENEULER_TAG}
+# 构建后可通过 skopeo 补充
+LABEL org.opencontainers.image.base.digest=""  
 
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
