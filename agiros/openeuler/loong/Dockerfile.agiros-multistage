@@ -1,7 +1,10 @@
 #
 # openEuler 24.03 + AGIROS Loong
 # Multi-stage build: base → dev → desktop → desktop-full
-#
+##################################################################### 
+#构建命令规则如下:
+#docker.agiros.org.cn/{project}/agiros-{ROS_DISTRO}-{OS}-{images-type}:{tag}
+######################################################################
 # Build:
 #   docker build --target base         -t agiros:openeuler-loong-base         -f Dockerfile.agiros-multistage .
 #   docker build --target dev          -t agiros:openeuler-loong-dev          -f Dockerfile.agiros-multistage .
@@ -29,7 +32,7 @@
 #      --build-arg TARGETARCH=riscv64 \
 #      --target base \
 #      --push \
-#      -t docker.agiros.org.cn/agiros/agiros-openeuler-base:2606-riscv64 \
+#      -t docker.agiros.org.cn/agiros/agiros-loong-openeuler-base:2606-riscv64 \
 #      -f agiros/openeuler/loong/Dockerfile.agiros-multistage \
 #      .
 
@@ -85,6 +88,8 @@ ENV LANG=C.UTF-8 \
 
 RUN ldconfig
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
@@ -219,6 +224,8 @@ ARG IMAGE_TAG
 ARG LOCAL_REGISTRY
 ARG LOCAL_IMAGE
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
@@ -273,6 +280,8 @@ ARG IMAGE_TAG
 ARG LOCAL_REGISTRY
 ARG LOCAL_IMAGE
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
@@ -312,6 +321,8 @@ ARG IMAGE_TAG
 ARG LOCAL_REGISTRY
 ARG LOCAL_IMAGE
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"

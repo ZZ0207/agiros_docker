@@ -50,6 +50,8 @@ ARG GIT_COMMIT
 ARG UBUNTU_TAG
 ARG IMAGE_TAG
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
@@ -169,6 +171,8 @@ ARG GIT_COMMIT
 ARG UBUNTU_TAG
 ARG IMAGE_TAG
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
@@ -231,6 +235,8 @@ ARG GIT_COMMIT
 ARG UBUNTU_TAG
 ARG IMAGE_TAG
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
@@ -271,6 +277,8 @@ ARG GIT_COMMIT
 ARG UBUNTU_TAG
 ARG IMAGE_TAG
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
