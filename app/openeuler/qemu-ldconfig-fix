@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+ACTION="${1:-enable}"
+ARCH="$(dpkg --print-architecture)"
+if [ "$ARCH" = "amd64" ]; then exit 0; fi
+
+if [ "$ACTION" = "enable" ]; then
+    if [ -f /usr/sbin/ldconfig.real ]; then
+        cp -a /usr/sbin/ldconfig.real /usr/sbin/ldconfig
+    else
+        cp -a /usr/sbin/ldconfig /usr/sbin/ldconfig.real
+    fi
+    printf '#!/bin/sh\nexit 0\n' > /usr/sbin/ldconfig
+    chmod +x /usr/sbin/ldconfig
+elif [ "$ACTION" = "disable" ]; then
+    mv /usr/sbin/ldconfig.real /usr/sbin/ldconfig
+fi

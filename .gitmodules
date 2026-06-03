@@ -8,9 +8,6 @@
 	path = src/unitree/dog-bot
 	url = https://gitee.com/jhaiq/dog-bot.git
 	branch = feature/gesture-optimize
-[submodule "ur_robotiq_sim_gz"]
-	path = src/ur5/ur_robotiq_sim_gz
-	url = https://gitee.com/agiros/ur_robotiq_sim_gz.git
 [submodule "arm-helper"]
 	path = src/ur5/arm-helper
 	url = https://gitee.com/zhang-guowei0207/arm-helper.git
