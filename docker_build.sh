@@ -1,50 +1,87 @@
 #!/bin/bash
-# Docker build script with submodule support, retry mechanism, and multi-arch support
-# Supports building all Dockerfiles for both ARM and x86 architectures
-# Usage: ./docker_build.sh [OPTIONS]
+# Unified multi-module Docker build script
+# Supports building all Dockerfiles in agiros/ and app/ directories
+# with multi-architecture support (amd64, arm64, riscv64).
+#
+# Usage:
+#   ./docker_build.sh                                          # Build all modules (default stage)
+#   ./docker_build.sh --list                                   # List available modules + stages
+#   ./docker_build.sh --module agiros-ubuntu                   # Build specific module
+#   ./docker_build.sh --module app-ubuntu --stage unitree      # Build specific module + stage
+#   ./docker_build.sh --stage base                             # Build base stage across all modules
+#   ./docker_build.sh --module agiros-ubuntu --platform linux/amd64 --push   # Push to registry
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# =============================================================================
+# Colors
+# =============================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log()   { echo -e "${GREEN}[INFO]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+err()   { echo -e "${RED}[ERROR]${NC} $*"; }
+info()  { echo -e "${CYAN}[.]${NC} $*"; }
+
+# =============================================================================
+# Module definitions
+# =============================================================================
+# Each module maps to a Dockerfile + available stages + default stage
+
+declare -A MODULES
+MODULES["agiros-ubuntu"]="agiros/ubuntu/loong/Dockerfile.agiros-multistage"
+MODULES["agiros-openeuler"]="agiros/openeuler/loong/Dockerfile.agiros-multistage"
+MODULES["app-ubuntu"]="app/ubuntu/Dockerfile.app.all"
+MODULES["app-openeuler"]="app/openeuler/Dockerfile.app.all"
+
+declare -A MODULE_STAGES
+MODULE_STAGES["agiros-ubuntu"]="base,dev,desktop,desktop-full"
+MODULE_STAGES["agiros-openeuler"]="base,dev,desktop,desktop-full"
+MODULE_STAGES["app-ubuntu"]="unitree,ur5"
+MODULE_STAGES["app-openeuler"]="unitree"
+
+declare -A MODULE_DEFAULT_STAGE
+MODULE_DEFAULT_STAGE["agiros-ubuntu"]="desktop-full"
+MODULE_DEFAULT_STAGE["agiros-openeuler"]="desktop-full"
+MODULE_DEFAULT_STAGE["app-ubuntu"]="unitree"
+MODULE_DEFAULT_STAGE["app-openeuler"]="unitree"
+
+# =============================================================================
 # Default values
+# =============================================================================
 PUSH=false
 RETRY=true
 PLATFORMS="linux/amd64,linux/arm64"
-IMAGE_TAG="12.18"
-BUILD_ALL=false
-BUILD_SPECIFIC=""
-REGISTRY_BASE="crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq"
+IMAGE_TAG="2606"
+BUILD_ALL_MODULES=false
+SELECTED_MODULE=""
+SELECTED_STAGES=""
+BUILD_ARGS=()
 
-# Define all Dockerfiles and their corresponding image names
-declare -A DOCKERFILES=(
-    ["agiros-openeuler"]="agiros/openeuler/Dockerfile-openeuler-loong"
-    ["agiros-ubuntu"]="agiros/ubuntu/Dockerfile-jammy"
-    ["ros2-openeuler"]="ros2/openeuler/Dockerfile-openeuler-humble"
-    ["ros2-foxy-ubuntu"]="ros2/ubuntu/Dockerfile-foxy"
-    ["ros2-humble-ubuntu"]="ros2/ubuntu/Dockerfile-humble"
-)
-
-declare -A IMAGE_NAMES=(
-    ["agiros-openeuler"]="agiros-loong-openeuler"
-    ["agiros-ubuntu"]="agiros-ubuntu-jammy"
-    ["ros2-openeuler"]="ros2-humble-openeuler"
-    ["ros2-foxy-ubuntu"]="ros2-foxy-ubuntu"
-    ["ros2-humble-ubuntu"]="ros2-humble-ubuntu"
-)
-
-declare -A REGISTRY_IMAGES=(
-    ["agiros-openeuler"]="${REGISTRY_BASE}/agiros_docker"
-    ["agiros-ubuntu"]="${REGISTRY_BASE}/agiros_docker-ubuntu"
-    ["ros2-openeuler"]="${REGISTRY_BASE}/ros2-humble-openeuler"
-    ["ros2-foxy-ubuntu"]="${REGISTRY_BASE}/ros2-foxy-ubuntu"
-    ["ros2-humble-ubuntu"]="${REGISTRY_BASE}/ros2-humble-ubuntu"
-)
-
-# Parse command line arguments
+# =============================================================================
+# CLI parsing
+# =============================================================================
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --module|-m)
+            SELECTED_MODULE="$2"
+            shift 2
+            ;;
+        --stage|-s)
+            SELECTED_STAGES="$2"
+            shift 2
+            ;;
+        --platform|-p)
+            PLATFORMS="$2"
+            shift 2
+            ;;
         --push)
             PUSH=true
             shift
@@ -53,26 +90,26 @@ while [[ $# -gt 0 ]]; do
             RETRY=false
             shift
             ;;
-        --platform)
-            PLATFORMS="$2"
-            shift 2
-            ;;
-        --tag)
+        --tag|-t)
             IMAGE_TAG="$2"
             shift 2
             ;;
-        --all)
-            BUILD_ALL=true
-            shift
-            ;;
-        --build)
-            BUILD_SPECIFIC="$2"
+        --build-arg)
+            # Pass-through: stored as-is for docker buildx --build-arg
+            BUILD_ARGS+=("--build-arg" "$2")
             shift 2
             ;;
-        --list)
-            echo "Available Dockerfiles:"
-            for key in "${!DOCKERFILES[@]}"; do
-                echo "  $key: ${DOCKERFILES[$key]}"
+        --all-modules|-a)
+            BUILD_ALL_MODULES=true
+            shift
+            ;;
+        --list|-l)
+            echo "Available modules:"
+            for module in "${!MODULES[@]}"; do
+                echo "  $module"
+                echo "    Dockerfile: ${MODULES[$module]}"
+                echo "    Stages:     ${MODULE_STAGES[$module]}"
+                echo "    Default:    ${MODULE_DEFAULT_STAGE[$module]}"
             done
             exit 0
             ;;
@@ -80,373 +117,413 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --all                  Build all Dockerfiles"
-            echo "  --build NAME           Build specific Dockerfile (use --list to see available names)"
+            echo "  --module, -m NAME      Build specific module (see --list)"
+            echo "  --stage, -s STAGE      Build specific stage (default: module default)"
+            echo "                         Multiple stages: --stage unitree,ur5"
+            echo "  --platform, -p PLAT    Build platforms (default: linux/amd64,linux/arm64)"
             echo "  --push                 Push image to registry after build"
             echo "  --no-retry             Disable retry on network errors"
-            echo "  --platform PLATFORMS   Set build platforms (default: linux/amd64,linux/arm64)"
-            echo "                         Options: linux/amd64, linux/arm64, or both (comma-separated)"
-            echo "  --tag TAG              Set image tag (default: 12.18)"
-            echo "  --list                 List all available Dockerfiles"
-            echo "  --help, -h             Show this help message"
+            echo "  --tag, -t TAG          Set image tag (default: 2606)"
+            echo "  --build-arg KV         Pass build arg to Docker (repeatable)"
+            echo "  --all-modules, -a      Build all modules"
+            echo "  --list, -l             List available modules"
+            echo "  --help, -h             Show this help"
             echo ""
             echo "Examples:"
-            echo "  $0 --all                                    # Build all Dockerfiles for both architectures"
-            echo "  $0 --build agiros-ubuntu                    # Build only AGIROS Ubuntu"
-            echo "  $0 --build agiros-ubuntu --platform linux/amd64  # Build only for x86"
-            echo "  $0 --all --platform linux/arm64             # Build all for ARM only"
-            echo "  $0 --build ros2-humble-ubuntu --push        # Build and push ROS2 Humble Ubuntu"
+            echo "  $0                                            # Build all modules (default stage)"
+            echo "  $0 --module agiros-ubuntu                     # Build specific module"
+            echo "  $0 --module app-ubuntu --stage unitree         # Build specific stage"
+            echo "  $0 --stage base                               # Build 'base' across all modules"
+            echo "  $0 --module agiros-ubuntu --platform linux/amd64  # Single-arch local build"
+            echo "  $0 --module agiros-ubuntu --push              # Build and push"
+            echo "  $0 --module app-ubuntu --build-arg PARALLEL_JOBS=8  # With build args"
             exit 0
             ;;
         *)
-            echo "Unknown option: $1"
-            echo "Use --help for usage information"
+            err "Unknown option: $1"
+            err "Use --help for usage"
             exit 1
             ;;
     esac
 done
 
-# If no build target specified, default to building all
-if [ "$BUILD_ALL" = false ] && [ -z "$BUILD_SPECIFIC" ]; then
-    BUILD_ALL=true
+# If no module specified and not --all-modules explicitly, build all
+if [ -z "$SELECTED_MODULE" ] && [ "$BUILD_ALL_MODULES" = false ]; then
+    BUILD_ALL_MODULES=true
 fi
 
-# Validate build target if specified
-if [ -n "$BUILD_SPECIFIC" ]; then
-    if [ -z "${DOCKERFILES[$BUILD_SPECIFIC]}" ]; then
-        echo "Error: Unknown build target: $BUILD_SPECIFIC"
-        echo "Use --list to see available targets"
+# Validate selected module if specified
+if [ -n "$SELECTED_MODULE" ]; then
+    if [ -z "${MODULES[$SELECTED_MODULE]:-}" ]; then
+        err "Unknown module: $SELECTED_MODULE"
+        err "Use --list to see available modules"
         exit 1
     fi
 fi
 
-echo "=== Docker Build Script ==="
-echo "Platforms: $PLATFORMS"
-echo "Build mode: $([ "$BUILD_ALL" = true ] && echo "All Dockerfiles" || echo "Specific: $BUILD_SPECIFIC")"
-echo "Image tag: $IMAGE_TAG"
-echo "Push to registry: $PUSH"
-echo ""
+# =============================================================================
+# Infrastructure setup
+# =============================================================================
 
 # Step 1: Initialize git submodules
-echo "Step 1: Initializing git submodules..."
+log "Step 1: Initializing git submodules..."
 if [ -f .gitmodules ]; then
-    if git submodule status | grep -q "^\-"; then
-        echo "Initializing submodules..."
+    if git submodule status 2>/dev/null | grep -q "^\-"; then
+        info "Initializing submodules..."
         git submodule update --init --recursive
-        echo "✓ Submodules initialized"
+        log "Submodules initialized"
     else
-        echo "✓ Submodules already initialized"
+        log "Submodules already initialized"
     fi
 else
-    echo "⚠ No .gitmodules file found, skipping submodule initialization"
+    info "No .gitmodules found, skipping submodule init"
 fi
 
-# Step 2: Ensure binfmt is installed for cross-arch builds
-echo ""
-echo "Step 2: Setting up binfmt for cross-arch builds..."
+# Step 2: Setup binfmt for cross-arch builds
 setup_binfmt() {
     local host_arch
     host_arch="$(uname -m)"
     local host_platform=""
     case "$host_arch" in
-        x86_64) host_platform="linux/amd64" ;;
+        x86_64)  host_platform="linux/amd64" ;;
         aarch64|arm64) host_platform="linux/arm64" ;;
-        armv7l) host_platform="linux/arm/v7" ;;
-        armv6l) host_platform="linux/arm/v6" ;;
+        armv7l)  host_platform="linux/arm/v7" ;;
+        armv6l)  host_platform="linux/arm/v6" ;;
+        riscv64) host_platform="linux/riscv64" ;;
     esac
-    if [ -z "$host_platform" ]; then
-        echo "⚠ Warning: Unknown host architecture (${host_arch}); assuming cross-arch build"
-    fi
-
-    normalize_platform() {
-        local p="$1"
-        p="${p#linux/}"
-        echo "linux/$p"
-    }
-
-    arch_from_platform() {
-        local p="$1"
-        p="${p#linux/}"
-        p="${p%%/*}"
-        echo "$p"
-    }
+    [ -n "$host_platform" ] || warn "Unknown host arch (${host_arch})"
 
     local need_binfmt=false
     local install_archs=()
-    local seen_archs=()
-    if [ -z "$PLATFORMS" ]; then
-        echo "⚠ Warning: PLATFORMS is empty; skipping binfmt setup"
-        return
-    fi
+
     IFS=',' read -ra platform_items <<< "$PLATFORMS"
     for raw_platform in "${platform_items[@]}"; do
-        local platform
+        local platform arch
         platform="$(echo "$raw_platform" | xargs)"
-        if [ -z "$platform" ]; then
-            echo "⚠ Warning: Empty platform entry in PLATFORMS"
-            continue
-        fi
-        local normalized_platform
-        normalized_platform="$(normalize_platform "$platform")"
-        local normalized_host_platform="$host_platform"
+        arch="${platform#linux/}"
+        arch="${arch%%/*}"
+        [ -z "$arch" ] && continue
+
+        # Skip if matches host arch (native builds don't need binfmt)
         if [ -n "$host_platform" ]; then
-            normalized_host_platform="$(normalize_platform "$host_platform")"
+            local host_arch2="${host_platform#linux/}"
+            host_arch2="${host_arch2%%/*}"
+            [ "$arch" = "$host_arch2" ] && continue
         fi
-        local host_arch_key=""
-        if [ -n "$normalized_host_platform" ]; then
-            host_arch_key="$(arch_from_platform "$normalized_host_platform")"
-        fi
-        local platform_arch_key
-        platform_arch_key="$(arch_from_platform "$normalized_platform")"
-        if [ -n "$host_arch_key" ] && [ "$platform_arch_key" = "$host_arch_key" ]; then
-            if [ "$host_arch_key" != "arm" ] || [ "$normalized_platform" = "$normalized_host_platform" ]; then
-                continue
-            fi
-        fi
-        # Map linux/<arch> to <arch> for binfmt
-        local arch
-        arch="$(arch_from_platform "$normalized_platform")"
-        if [ -n "$arch" ]; then
-            need_binfmt=true
-            if [[ " ${seen_archs[*]} " != *" ${arch} "* ]]; then
-                install_archs+=("$arch")
-                seen_archs+=("$arch")
-            fi
-        fi
+
+        need_binfmt=true
+        [[ " ${install_archs[*]} " != *" ${arch} "* ]] && install_archs+=("$arch")
     done
 
     if [ "$need_binfmt" = true ]; then
         local install_arg
         install_arg="$(IFS=,; echo "${install_archs[*]}")"
-        echo "Installing/refreshing binfmt handlers (qemu) for: ${install_arg}"
+        log "Installing binfmt handlers for: ${install_arg}"
         if ! docker run --privileged --rm tonistiigi/binfmt --install "${install_arg}"; then
-            echo "⚠ Warning: Failed to install binfmt handlers."
-            echo "  Cross-arch builds may fail under emulation."
-            echo "  Try running: docker run --privileged --rm tonistiigi/binfmt --install ${install_arg}"
+            warn "binfmt install failed — cross-arch builds may fail under emulation."
         else
-            echo "✓ binfmt handlers installed"
+            log "binfmt handlers installed"
         fi
     else
-        echo "✓ Host platform matches target; binfmt not required"
+        log "Host platform matches target; binfmt not required"
     fi
 }
+
+log "Step 2: Setting up binfmt for cross-arch builds..."
 setup_binfmt
 
-# Step 3: Ensure buildx builder exists and works
-echo ""
-echo "Step 3: Setting up Docker Buildx..."
+# Step 3: Ensure buildx builder exists
 setup_buildx() {
-    if ! docker buildx inspect multiarch &>/dev/null; then
-        echo "Creating buildx builder 'multiarch'..."
-        docker buildx create --name multiarch --driver docker-container --use
-        docker buildx inspect --bootstrap || {
-            echo "Error: Failed to create buildx builder. You may need to fix Docker daemon configuration."
-            echo "Run: sudo bash fix_docker_runtime.sh"
-            exit 1
-        }
-        echo "✓ Buildx builder created"
-    else
-        docker buildx use multiarch
-        # Try to bootstrap to check if it works
-        if ! docker buildx inspect --bootstrap &>/dev/null; then
-            echo "Warning: Builder exists but failed to start. Recreating..."
-            docker buildx rm multiarch
-            docker buildx create --name multiarch --driver docker-container --use
-            docker buildx inspect --bootstrap || {
-                echo "Error: Failed to recreate buildx builder. You may need to fix Docker daemon configuration."
-                echo "Run: sudo bash fix_docker_runtime.sh"
+    if [ "$PUSH" = true ]; then
+        # For multi-arch push, use docker-container driver with network=host
+        local builder_name="agiros-multiarch"
+        if docker buildx ls 2>/dev/null | grep -q "${builder_name}"; then
+            docker buildx use "${builder_name}" 2>/dev/null || true
+        else
+            log "Creating buildx builder '${builder_name}' (docker-container, network=host)"
+            docker buildx create \
+                --name "${builder_name}" \
+                --driver docker-container \
+                --driver-opt network=host \
+                --use || {
+                err "Failed to create buildx builder"
                 exit 1
             }
-            echo "✓ Buildx builder recreated"
-        else
-            echo "✓ Using existing buildx builder"
         fi
+        docker buildx inspect --bootstrap "${builder_name}" >/dev/null 2>&1 || {
+            err "Failed to bootstrap buildx builder"
+            exit 1
+        }
+        log "Buildx builder ready"
+    else
+        # Local build: use default docker driver
+        docker buildx use default 2>/dev/null || true
+        log "Using default docker builder (local build)"
     fi
 }
+
+log "Step 3: Setting up Docker Buildx..."
 setup_buildx
 
-# Build helper function with retry mechanism
-build_image() {
-    local dockerfile_key="$1"
-    local dockerfile="${DOCKERFILES[$dockerfile_key]}"
-    local image_name="${IMAGE_NAMES[$dockerfile_key]}"
-    local registry_image="${REGISTRY_IMAGES[$dockerfile_key]}"
-    
-    echo ""
-    echo "=========================================="
-    echo "Building: $dockerfile_key"
-    echo "Dockerfile: $dockerfile"
-    echo "Image: ${image_name}:${IMAGE_TAG}"
-    echo "Platforms: $PLATFORMS"
-    echo "=========================================="
-    
-    local build_args=(
-        "buildx" "build"
-        "--platform" "$PLATFORMS"
-        "--progress=plain"
-        "-t" "${image_name}:${IMAGE_TAG}"
-        "-f" "$dockerfile"
-    )
-    
-    if [ "$PUSH" = true ]; then
-        build_args+=(
-            "--push"
-            "-t" "${registry_image}:${IMAGE_TAG}"
-            "-t" "${registry_image}:latest"
-        )
-    else
-        # For local builds, check if multiple platforms are specified
-        local platform_count=$(echo "$PLATFORMS" | tr ',' '\n' | wc -l)
-        if [ "$platform_count" -gt 1 ]; then
-            # Multiple platforms: build for first platform only (--load limitation)
-            local first_platform=$(echo "$PLATFORMS" | cut -d',' -f1 | xargs)
-            build_args[2]="--platform"
-            build_args[3]="$first_platform"
-            build_args+=("--load")
-            echo "⚠️  Note: --load only supports single platform. Building for $first_platform only."
-            echo "   To build for all platforms, use --push or specify a single platform with --platform"
-        else
-            # Single platform: normal build
-            build_args+=("--load")
-        fi
-    fi
-    
-    build_args+=(".")
-    
-    # Execute build and capture exit code
-    if docker "${build_args[@]}"; then
-        return 0
-    else
+# =============================================================================
+# Build function
+# =============================================================================
+build_single() {
+    local module="$1"
+    local stage="$2"
+    local dockerfile="${MODULES[$module]}"
+    local module_stages="${MODULE_STAGES[$module]}"
+    local default_stage="${MODULE_DEFAULT_STAGE[$module]}"
+
+    # Validate stage
+    if ! echo "$module_stages" | tr ',' '\n' | grep -qx "$stage"; then
+        err "Invalid stage '$stage' for module '$module'. Valid: ${module_stages}"
         return 1
     fi
+
+    # Auto-injected build args
+    local auto_args=(
+        --build-arg "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    )
+    if git rev-parse --short HEAD &>/dev/null; then
+        auto_args+=(--build-arg "GIT_COMMIT=$(git rev-parse --short HEAD)")
+    fi
+    if [ -n "${IMAGE_TAG:-}" ]; then
+        auto_args+=(--build-arg "IMAGE_TAG=${IMAGE_TAG}")
+    fi
+
+    local tag="${module}-${stage}:${IMAGE_TAG}"
+
+    echo ""
+    echo "=========================================="
+    echo "  Module:   $module"
+    echo "  Stage:    $stage"
+    echo "  Dockerfile: $dockerfile"
+    echo "  Tag:      $tag"
+    echo "  Platforms: $PLATFORMS"
+    echo "=========================================="
+
+    if [ "$PUSH" = true ]; then
+        # Multi-arch push
+        info "Pushing to registry..."
+        docker buildx build \
+            -f "$dockerfile" \
+            --target "$stage" \
+            --platform "$PLATFORMS" \
+            "${auto_args[@]}" \
+            "${BUILD_ARGS[@]:-}" \
+            -t "$tag" \
+            --push \
+            "." || return 1
+        log "Pushed: $tag"
+    else
+        # Local build (--load only supports single platform)
+        local platform_count
+        platform_count=$(echo "$PLATFORMS" | tr ',' '\n' | wc -l | xargs)
+        if [ "$platform_count" -gt 1 ]; then
+            local first_platform
+            first_platform=$(echo "$PLATFORMS" | cut -d',' -f1 | xargs)
+            warn "Local build with --load supports single platform only."
+            warn "Building for ${first_platform}. Use --push for multi-arch."
+            docker buildx build \
+                -f "$dockerfile" \
+                --target "$stage" \
+                --platform "$first_platform" \
+                "${auto_args[@]}" \
+                "${BUILD_ARGS[@]:-}" \
+                -t "$tag" \
+                --load \
+                "." || return 1
+        else
+            docker buildx build \
+                -f "$dockerfile" \
+                --target "$stage" \
+                --platform "$PLATFORMS" \
+                "${auto_args[@]}" \
+                "${BUILD_ARGS[@]:-}" \
+                -t "$tag" \
+                --load \
+                "." || return 1
+        fi
+        log "Built: $tag"
+    fi
+    return 0
 }
 
-# Retry function for network errors
+# =============================================================================
+# Retry function
+# =============================================================================
 retry_build() {
-    local dockerfile_key="$1"
+    local module="$1"
+    local stage="$2"
     local max_attempts=3
     local attempt=1
     local delay=5
-    local log_file="/tmp/docker_build_${dockerfile_key}_$(date +%s).log"
-    
+    local log_file="/tmp/docker_build_${module}_${stage}_$(date +%s).log"
+
     while [ $attempt -le $max_attempts ]; do
-        echo ""
-        echo "Build attempt $attempt of $max_attempts for $dockerfile_key..."
-        
-        # Execute build and capture exit code correctly with pipe
-        build_image "$dockerfile_key" 2>&1 | tee "$log_file"
-        build_exit_code=${PIPESTATUS[0]}
-        
-        if [ $build_exit_code -eq 0 ]; then
-            echo ""
-            echo "✓ Build successful for $dockerfile_key!"
+        info "Build attempt $attempt of $max_attempts for $module:$stage..."
+
+        build_single "$module" "$stage" 2>&1 | tee "$log_file"
+        local exit_code=${PIPESTATUS[0]}
+
+        if [ $exit_code -eq 0 ]; then
+            log "Build successful: $module:$stage"
             rm -f "$log_file"
             return 0
         fi
-        
-        # Check if it's a network error
+
+        # Check for network errors
         if grep -qE "(EOF|timeout|connection|network|short read|failed to fetch|Connection timed out|unable to access)" "$log_file"; then
             if [ "$RETRY" = true ] && [ $attempt -lt $max_attempts ]; then
-                echo ""
-                echo "⚠ Network error detected. Waiting ${delay}s before retry..."
-                sleep $delay
-                delay=$((delay * 2))  # Exponential backoff
+                warn "Network error. Waiting ${delay}s before retry..."
+                sleep "$delay"
+                delay=$((delay * 2))
                 attempt=$((attempt + 1))
-                echo "Cleaning buildx cache before retry..."
-                docker buildx prune -f || true
+                info "Cleaning buildx cache..."
+                docker buildx prune -f 2>/dev/null || true
             else
-                echo ""
-                echo "✗ Build failed with network error after $attempt attempt(s) for $dockerfile_key"
+                err "Network error after $attempt attempt(s): $module:$stage"
                 rm -f "$log_file"
                 return 1
             fi
         else
-            echo ""
-            echo "✗ Build failed with non-network error for $dockerfile_key. See log: $log_file"
+            err "Build error (non-network): $module:$stage"
+            err "Log: $log_file"
             return 1
         fi
     done
-    
-    echo ""
-    echo "✗ Build failed after $max_attempts attempts for $dockerfile_key"
+
+    err "Build failed after $max_attempts attempts: $module:$stage"
     rm -f "$log_file"
     return 1
 }
 
-# Clean buildx cache before building
-echo "Cleaning buildx cache..."
-docker buildx prune -f || true
+# =============================================================================
+# Module resolution
+# =============================================================================
+resolve_build_targets() {
+    local -n targets_ref=$1
+    targets_ref=()
 
-# Step 4: Build images
-echo ""
-echo "Step 4: Building Docker image(s)..."
-
-# Determine which images to build
-declare -a build_targets
-if [ "$BUILD_ALL" = true ]; then
-    for key in "${!DOCKERFILES[@]}"; do
-        build_targets+=("$key")
-    done
-else
-    build_targets+=("$BUILD_SPECIFIC")
-fi
-
-# Build each target
-total=${#build_targets[@]}
-current=0
-failed_builds=()
-successful_builds=()
-
-for target in "${build_targets[@]}"; do
-    current=$((current + 1))
-    echo ""
-    echo "[$current/$total] Processing: $target"
-    
-    if [ "$RETRY" = true ]; then
-        if retry_build "$target"; then
-            successful_builds+=("$target")
+    if [ -n "$SELECTED_MODULE" ]; then
+        # Single module
+        if [ -n "$SELECTED_STAGES" ]; then
+            IFS=',' read -ra stages <<< "$SELECTED_STAGES"
+            for stg in "${stages[@]}"; do
+                stg=$(echo "$stg" | xargs)
+                targets_ref+=("$SELECTED_MODULE:$stg")
+            done
         else
-            failed_builds+=("$target")
+            targets_ref+=("$SELECTED_MODULE:${MODULE_DEFAULT_STAGE[$SELECTED_MODULE]}")
+        fi
+    elif [ "$BUILD_ALL_MODULES" = true ]; then
+        for module in "${!MODULES[@]}"; do
+            if [ -n "$SELECTED_STAGES" ]; then
+                IFS=',' read -ra stages <<< "$SELECTED_STAGES"
+                for stg in "${stages[@]}"; do
+                    stg=$(echo "$stg" | xargs)
+                    # Only add if module supports this stage
+                    if echo "${MODULE_STAGES[$module]}" | tr ',' '\n' | grep -qx "$stg"; then
+                        targets_ref+=("$module:$stg")
+                    fi
+                done
+            else
+                targets_ref+=("$module:${MODULE_DEFAULT_STAGE[$module]}")
+            fi
+        done
+    fi
+
+    # Deduplicate
+    local -A seen
+    local deduped=()
+    for t in "${targets_ref[@]}"; do
+        [ -z "${seen[$t]:-}" ] && deduped+=("$t") && seen[$t]=1
+    done
+    targets_ref=("${deduped[@]}")
+
+    if [ ${#targets_ref[@]} -eq 0 ]; then
+        err "No build targets resolved."
+        err "Use --list to see available modules, or --help for usage."
+        exit 1
+    fi
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+# Clean buildx cache before starting
+info "Cleaning buildx cache..."
+docker buildx prune -f 2>/dev/null || true
+
+echo ""
+echo -e "${GREEN}============================================${NC}"
+echo -e "${GREEN}  Unified Docker Build${NC}"
+echo -e "${GREEN}============================================${NC}"
+info "Platforms  : ${PLATFORMS}"
+info "Tag        : ${IMAGE_TAG}"
+info "Push       : ${PUSH}"
+echo ""
+
+# Resolve targets
+declare -a BUILD_TARGETS
+resolve_build_targets BUILD_TARGETS
+
+total=${#BUILD_TARGETS[@]}
+current=0
+failed=()
+successful=()
+
+for target in "${BUILD_TARGETS[@]}"; do
+    current=$((current + 1))
+    module="${target%%:*}"
+    stage="${target##*:}"
+
+    echo ""
+    echo -e "${GREEN}============================================${NC}"
+    info "[$current/$total] Building ${module}:${stage}"
+    echo -e "${GREEN}============================================${NC}"
+
+    if [ "$RETRY" = true ]; then
+        if retry_build "$module" "$stage"; then
+            successful+=("$target")
+        else
+            failed+=("$target")
         fi
     else
-        if build_image "$target"; then
-            successful_builds+=("$target")
+        if build_single "$module" "$stage"; then
+            successful+=("$target")
         else
-            failed_builds+=("$target")
+            failed+=("$target")
         fi
     fi
 done
 
-# Step 5: Summary
+# Summary
 echo ""
 echo "=========================================="
-echo "Build Summary"
+echo -e "${GREEN}Build Summary${NC}"
 echo "=========================================="
-echo "Total targets: $total"
-echo "Successful: ${#successful_builds[@]}"
-echo "Failed: ${#failed_builds[@]}"
+info "Total:     $total"
+info "Success:   ${#successful[@]}"
+info "Failed:    ${#failed[@]}"
 echo ""
 
-if [ ${#successful_builds[@]} -gt 0 ]; then
-    echo "✓ Successfully built:"
-    for target in "${successful_builds[@]}"; do
-        image_name="${IMAGE_NAMES[$target]}"
-        echo "  - $target (${image_name}:${IMAGE_TAG})"
-        if [ "$PUSH" = true ]; then
-            registry_image="${REGISTRY_IMAGES[$target]}"
-            echo "    Pushed to: ${registry_image}:${IMAGE_TAG}, ${registry_image}:latest"
-        fi
-    done
-    echo ""
-fi
-
-if [ ${#failed_builds[@]} -gt 0 ]; then
-    echo "✗ Failed builds:"
-    for target in "${failed_builds[@]}"; do
+if [ ${#successful[@]} -gt 0 ]; then
+    log "Successfully built:"
+    for target in "${successful[@]}"; do
         echo "  - $target"
     done
-    echo ""
+fi
+
+if [ ${#failed[@]} -gt 0 ]; then
+    err "Failed builds:"
+    for target in "${failed[@]}"; do
+        echo "  - $target"
+    done
     exit 1
 fi
 
-echo "=== Build Complete ==="
+echo ""
+log "=== Build Complete ==="
