@@ -86,12 +86,16 @@ USER root
 ARG ROS_DISTRO
 ARG ROS_PREFIX
 ARG USERNAME
-ARG WORKSPACE
+
+##设置unitree workspace目录
+ARG WORKSPACE=/workspace/app/unitree
 ARG NETWORK_INTERFACE_NAME
 ARG BUILD_DATE
 ARG GIT_COMMIT
 ARG PARALLEL_JOBS
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
@@ -148,7 +152,7 @@ RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
 
 
 # 创建工作空间并设置权限
-RUN mkdir -p ${WORKSPACE}/unitree/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
+RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
 
 USER ${USERNAME}
 
@@ -156,19 +160,19 @@ USER ${USERNAME}
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 # 复制应用源码（使用 --chown 确保权限正确）
-COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/unitree/src
+COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/src
 
 # 构建 cyclonedds_ws
-RUN cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash    && colcon build --parallel-workers ${PARALLEL_JOBS}    && source install/setup.bash
+RUN cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash    && colcon build --parallel-workers ${PARALLEL_JOBS}    && source install/setup.bash
 
-RUN cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws \
+RUN cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
 
 # 构建 dog-bot 源码
-RUN cd ${WORKSPACE}/unitree \
+RUN cd ${WORKSPACE} \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
@@ -180,8 +184,8 @@ RUN cat > /ros_entrypoint.sh <<EOF
 #!/bin/bash
 set -e
 source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
-[ -f "${WORKSPACE}/unitree/install/setup.bash" ] && source ${WORKSPACE}/unitree/install/setup.bash
-source ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+[ -f "${WORKSPACE}/install/setup.bash" ] && source ${WORKSPACE}/install/setup.bash
+source ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="<CycloneDDS><Domain><General><Interfaces><NetworkInterface name=\"${NETWORK_INTERFACE_NAME}\" priority=\"default\" multicast=\"default\" /></Interfaces></General></Domain></CycloneDDS>"
 exec "\$@"

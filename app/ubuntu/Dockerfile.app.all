@@ -1,11 +1,13 @@
 ## 包含所有应用的 app docker 镜像
 ## 基础镜像: docker pull docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-ubuntu-desktop:2606
 ##########################################
+#    --target unitree \   # ← 必须指定，否则默认最后一个阶段
 #
 #  docker buildx build  \
 #     --platform linux/amd64,linux/arm64  \
 #     --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"  \
 #     --build-arg GIT_COMMIT="$(git rev-parse --short HEAD)"  \
+#     --target unitree \
 #     -f app/ubuntu/Dockerfile.app.all  \
 #     -t docker.agiros.org.cn/app/agiros-ubuntu-unitree-app:2606  \
 #     --push  \
@@ -90,14 +92,19 @@ USER root
 ARG ROS_DISTRO
 ARG ROS_PREFIX
 ARG USERNAME
-ARG WORKSPACE
+
+##设置unitree workspace目录
+ARG WORKSPACE=/workspace/app/unitree
+
 ARG NETWORK_INTERFACE_NAME
 ARG BUILD_DATE
 ARG GIT_COMMIT
-ARG PARALLEL_JOBS=4
+ARG PARALLEL_JOBS
 ARG IMAGE_TAG
 ARG OS
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
 # ========== 最终镜像 LABEL（仅在此处定义） ==========
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
@@ -156,7 +163,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     qemu-ldconfig-fix disable
 
 # 创建工作空间并设置权限
-RUN mkdir -p ${WORKSPACE}/unitree/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
+RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
 
 USER ${USERNAME}
 
@@ -164,13 +171,13 @@ USER ${USERNAME}
 RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 # 复制应用源码（使用 --chown 确保权限正确）
-COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/unitree/src
+COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/src
 
 # cyclonedds 构建（带编译缓存）
-RUN --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/build,uid=1000,gid=1000 \
-    --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/install,uid=1000,gid=1000 \
+RUN --mount=type=cache,target=${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/build,uid=1000,gid=1000 \
+    --mount=type=cache,target=${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install,uid=1000,gid=1000 \
     set -exo pipefail; \
-    cd ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws \
+    cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws \
     && mkdir -p log build install \
     && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
@@ -178,10 +185,10 @@ RUN --mount=type=cache,target=${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_w
     && source install/setup.bash
 
 # dog-bot 构建（带编译缓存）
-RUN --mount=type=cache,target=${WORKSPACE}/unitree/build,uid=1000,gid=1000 \
-    --mount=type=cache,target=${WORKSPACE}/unitree/install,uid=1000,gid=1000 \
+RUN --mount=type=cache,target=${WORKSPACE}/build,uid=1000,gid=1000 \
+    --mount=type=cache,target=${WORKSPACE}/install,uid=1000,gid=1000 \
     set -exo pipefail; \
-    cd ${WORKSPACE}/unitree \
+    cd ${WORKSPACE} \
     && mkdir -p log build install \
     && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
@@ -195,8 +202,8 @@ RUN cat > /ros_entrypoint.sh <<EOF
 #!/bin/bash
 set -e
 source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
-[ -f "${WORKSPACE}/unitree/install/setup.bash" ] && source ${WORKSPACE}/unitree/install/setup.bash
-source ${WORKSPACE}/unitree/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+[ -f "${WORKSPACE}/install/setup.bash" ] && source ${WORKSPACE}/install/setup.bash
+source ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="<CycloneDDS><Domain><General><Interfaces><NetworkInterface name=\"${NETWORK_INTERFACE_NAME}\" priority=\"default\" multicast=\"default\" /></Interfaces></General></Domain></CycloneDDS>"
 exec "\$@"
@@ -213,8 +220,93 @@ CMD ["bash"]
 # Stage 3: ur5 app 
 # =============================================================================
 
+FROM base AS ur5
+SHELL ["/bin/bash", "-exo", "pipefail", "-c"]
+
+ARG TARGETARCH TARGETPLATFORM
+ARG ROS_DISTRO ROS_PREFIX USERNAME
+ARG WORKSPACE=/workspace/app/ur5
+ARG NETWORK_INTERFACE_NAME BUILD_DATE GIT_COMMIT PARALLEL_JOBS IMAGE_TAG OS
 
 
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS UR5 Application"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} application image with UR5 robot support. Includes AGIROS Moveit, yolo-ros ."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-${OS}-desktop:${IMAGE_TAG}"
+
+
+
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENV WORKSPACE=${WORKSPACE}
+
+USER root
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    apt-get update && apt-get install -y --no-install-recommends \
+        lsb-release wget gnupg python3-pip && \
+    wget -q https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
+    qemu-ldconfig-fix disable
+
+RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
+
+USER ${USERNAME}
+WORKDIR ${WORKSPACE}
+
+# .bashrc 配置（修正引号）
+RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc && \
+    echo "export GAZEBO_MODEL_PATH=\$GAZEBO_MODEL_PATH:${WORKSPACE}/src" >> ~/.bashrc && \
+    echo "export IGN_GAZEBO_RESOURCE_PATH=\$IGN_GAZEBO_RESOURCE_PATH:${WORKSPACE}/src" >> ~/.bashrc && \
+    echo "export IGN_GAZEBO_RESOURCE_PATH=${WORKSPACE}/src/ur_robotiq_sim_gz/models:\$IGN_GAZEBO_RESOURCE_PATH" >> ~/.bashrc && \
+    echo "cd ${WORKSPACE}" >> ~/.bashrc
+
+COPY --chown=${USERNAME}:${USERNAME} src/ur5 ${WORKSPACE}/src
+
+# yolo_ros 依赖（修正路径）
+RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
+    set -exo pipefail; \
+    cd ${WORKSPACE}/src/yolo_ros/ && \
+    pip3 install --no-cache-dir -r requirements.txt
+
+# 构建
+RUN --mount=type=cache,target=${WORKSPACE}/build,uid=1000,gid=1000 \
+    --mount=type=cache,target=${WORKSPACE}/install,uid=1000,gid=1000 \
+    set -exo pipefail; \
+    cd ${WORKSPACE} && \
+    mkdir -p log build install && \
+    source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash && \
+    agirosdep update && \
+    agirosdep install --from-paths src --ignore-src -r -y && \
+    unset PYTHONDONTWRITEBYTECODE && \
+    colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} && \
+    source install/setup.bash
+
+USER root
+RUN cat > /ros_entrypoint.sh <<'EOF'
+#!/bin/bash
+set -e
+source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
+[ -f "${WORKSPACE}/install/setup.bash" ] && source ${WORKSPACE}/install/setup.bash
+exec "$@"
+EOF
+RUN chmod +x /ros_entrypoint.sh
+
+USER ${USERNAME}
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
 
 # =============================================================================
 # Stage 4: wheeltec app 
