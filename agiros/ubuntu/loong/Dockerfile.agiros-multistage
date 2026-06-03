@@ -79,7 +79,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
     CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
     LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
-    PATH=${AGIROS_INSTALL_BASE}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    PATH=${AGIROS_INSTALL_BASE}/bin:$PATH
 
 # --- 系统基础 ---
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -147,6 +147,10 @@ exec "$@"
 EOF
 
 RUN chmod +x /ros_entrypoint.sh
+
+# 健康检查：验证 ROS 环境可加载
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD bash -c 'source "${AGIROS_INSTALL_BASE}/setup.bash" 2>/dev/null || exit 1'
 
 USER ${USERNAME}
 WORKDIR /workspace

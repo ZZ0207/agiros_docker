@@ -84,9 +84,13 @@ ENV LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ROS_DISTRO=${ROS_DISTRO} \
-    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE}
-
-RUN ldconfig
+    AGIROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
+    ROS_ROOT=${AGIROS_INSTALL_BASE} \
+    ROS_INSTALL_BASE=${AGIROS_INSTALL_BASE} \
+    AMENT_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    CMAKE_PREFIX_PATH=${AGIROS_INSTALL_BASE} \
+    LD_LIBRARY_PATH=${AGIROS_INSTALL_BASE}/lib:${AGIROS_INSTALL_BASE}/lib64 \
+    PATH=${AGIROS_INSTALL_BASE}/bin:$PATH
 
 # 显式覆盖基础镜像继承的 Author 字段
 LABEL maintainer="AGIROS Team <4384213@qq.com>"
@@ -162,6 +166,9 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
 COPY agiros/openeuler/loong/qemu-ldconfig-fix /usr/local/bin/qemu-ldconfig-fix
 RUN chmod +x /usr/local/bin/qemu-ldconfig-fix
 
+# 初始化动态链接器缓存（QEMU fix 就绪后执行，避免跨架构构建时 ldconfig 崩溃）
+RUN ldconfig
+
 # --- 安装 AGIROS Loong Base ---
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
@@ -201,6 +208,10 @@ exec "$@"
 EOF
 
 RUN chmod +x /ros_entrypoint.sh
+
+# 健康检查：验证 ROS 环境可加载
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD bash -c 'source "${AGIROS_INSTALL_BASE}/setup.bash" 2>/dev/null || exit 1'
 
 USER ${USERNAME}
 WORKDIR /workspace
