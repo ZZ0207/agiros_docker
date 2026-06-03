@@ -8,3 +8,27 @@
 	path = src/unitree/dog-bot
 	url = https://gitee.com/jhaiq/dog-bot.git
 	branch = feature/gesture-optimize
+[submodule "ur_robotiq_sim_gz"]
+	path = src/ur5/ur_robotiq_sim_gz
+	url = https://gitee.com/agiros/ur_robotiq_sim_gz.git
+[submodule "arm-helper"]
+	path = src/ur5/arm-helper
+	url = https://gitee.com/zhang-guowei0207/arm-helper.git
+[submodule "arm-control-msgs"]
+	path = src/ur5/arm-control-msgs
+	url = https://gitee.com/zhang-guowei0207/arm-control-msgs.git
+[submodule "ur5-demo"]
+	path = src/ur5/ur5-demo
+	url = https://gitee.com/agiros/ur5-demo.git
+[submodule "yolo_ros"]
+	path = src/ur5/yolo_ros
+	url = https://gitee.com/agiros/yolo_ros.git
+[submodule "grasp-msgs"]
+	path = src/ur5/grasp-msgs
+	url = https://gitee.com/zhang-guowei0207/grasp-msgs.git
+[submodule "yolo_tf_publisher"]
+	path = src/ur5/yolo_tf_publisher
+	url = https://gitee.com/agiros/yolo_tf_publisher.git
+[submodule "src/ur5/ur_robotiq_sim_gz"]
+	path = src/ur5/ur_robotiq_sim_gz
+	url = https://gitee.com/agiros/ur_robotiq_sim_gz.git
