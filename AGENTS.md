@@ -46,26 +46,22 @@ This project provides **Docker-based development environments** for the **Unitre
 
 ```
 .
-├── agiros/                          # AGIROS Dockerfile configurations
-│   ├── openeuler/
-│   │   └── Dockerfile-openeuler-loong   # openEuler 24.03 + AGIROS loong
-│   └── ubuntu/
-│       └── Dockerfile-jammy             # Ubuntu 22.04 + AGIROS loong
+├── agiros/                          # AGIROS base image Dockerfiles
+│   ├── openeuler/loong/
+│   │   └── Dockerfile.agiros-multistage  # openEuler + AGIROS (stages: base/dev/desktop/desktop-full)
+│   └── ubuntu/loong/
+│       └── Dockerfile.agiros-multistage  # Ubuntu + AGIROS (stages: base/dev/desktop/desktop-full)
 │
-├── ros2/                            # ROS2 Dockerfile configurations
+├── app/                             # Application Dockerfiles (FROM agiros images)
 │   ├── openeuler/
-│   │   └── Dockerfile-openeuler-humble  # openEuler 24.03 + ROS2 Humble
+│   │   └── Dockerfile.app.all       # openEuler app (stage: unitree)
 │   └── ubuntu/
-│       ├── Dockerfile-foxy              # Ubuntu 20.04 + ROS2 Foxy
-│       └── Dockerfile-humble            # Ubuntu 22.04 + ROS2 Humble
-│
-├── ros1&ros2/                       # Experimental ROS1+ROS2 bridge images
+│       └── Dockerfile.app.all       # Ubuntu app (stages: unitree, ur5)
 │
 ├── src/                             # Build source files and scripts
-│   ├── tests/
-│   │   └── test_gi.py               # PyGObject/GStreamer validation test
+│   ├── unitree/                     # Unitree dog-bot submodule
+│   ├── ur5/                         # UR5 robot arm submodules
 │   ├── agiros_cyclonedds_setup.sh   # AGIROS CycloneDDS environment setup
-│   ├── ros_cyclonedds_setup.sh      # ROS2 CycloneDDS environment setup
 │   ├── go2_ros2_setup.sh            # Go2-specific ROS2 network setup
 │   └── docker_internal_setup.sh     # Container initialization entrypoint
 │
@@ -75,11 +71,11 @@ This project provides **Docker-based development environments** for the **Unitre
 ├── .gitee/pipelines/                # Gitee Go CI/CD
 │   └── docker-build.yml             # Gitee build pipeline
 │
-├── docker_build.sh                  # Main build script (recommended)
-├── docker-compose.yml               # Docker Compose configuration
+├── docker_build.sh                  # Unified build script (all modules)
+├── docker-compose-dev.yml           # Docker Compose for development
 ├── docker_run.sh                    # Quick container launch script
-├── README.md                        # User documentation (mainly in Chinese)
-└── TROUBLESHOOTING.md               # Network error fixes and debugging
+├── README.md                        # User documentation (Chinese)
+└── AGENTS.md                        # AI agent documentation
 ```
 
 ### Git Submodules
@@ -101,38 +97,49 @@ git submodule update --init --recursive
 
 ## Build System
 
-### Available Docker Images
+### Available Docker Images (Modules)
 
-| Image Key | Dockerfile Path | Description |
-|-----------|-----------------|-------------|
-| `agiros-openeuler` | `agiros/openeuler/Dockerfile-openeuler-loong` | AGIROS on openEuler 24.03 |
-| `agiros-ubuntu` | `agiros/ubuntu/Dockerfile-jammy` | AGIROS on Ubuntu 22.04 |
-| `ros2-openeuler` | `ros2/openeuler/Dockerfile-openeuler-humble` | ROS2 Humble on openEuler |
-| `ros2-foxy-ubuntu` | `ros2/ubuntu/Dockerfile-foxy` | ROS2 Foxy on Ubuntu 20.04 |
-| `ros2-humble-ubuntu` | `ros2/ubuntu/Dockerfile-humble` | ROS2 Humble on Ubuntu 22.04 |
+| Module | Dockerfile | Stages | Default Stage |
+|--------|-----------|--------|---------------|
+| `agiros-ubuntu` | `agiros/ubuntu/loong/Dockerfile.agiros-multistage` | base, dev, desktop, desktop-full | desktop-full |
+| `agiros-openeuler` | `agiros/openeuler/loong/Dockerfile.agiros-multistage` | base, dev, desktop, desktop-full | desktop-full |
+| `app-ubuntu` | `app/ubuntu/Dockerfile.app.all` | unitree, ur5 | unitree |
+| `app-openeuler` | `app/openeuler/Dockerfile.app.all` | unitree | unitree |
+
+The `agiros-*` modules are base images with 4 stages (inheritance chain: base → dev → desktop → desktop-full).
+The `app-*` modules are application images that `FROM` the agiros base images for specific robot platforms.
 
 ### Build Commands
 
 #### Using docker_build.sh (Recommended)
 
 ```bash
-# Build all images (default)
+# Build all modules (default stages)
 bash docker_build.sh
 
-# Build specific image
-bash docker_build.sh --build agiros-ubuntu
-
-# Build and push to registry
-bash docker_build.sh --all --push
-
-# Build for single platform
-bash docker_build.sh --build agiros-ubuntu --platform linux/amd64
-
-# Disable network error retry
-bash docker_build.sh --no-retry
-
-# List available images
+# List available modules and stages
 bash docker_build.sh --list
+
+# Build specific module
+bash docker_build.sh --module agiros-ubuntu
+
+# Build specific module + stage
+bash docker_build.sh --module app-ubuntu --stage unitree
+
+# Build a stage across all modules that support it
+bash docker_build.sh --stage base
+
+# Single-platform local build (faster)
+bash docker_build.sh --module agiros-ubuntu --platform linux/amd64
+
+# Push to registry (multi-arch)
+bash docker_build.sh --module app-ubuntu --platform linux/amd64,linux/arm64 --push
+
+# Custom tag and build args
+bash docker_build.sh --module app-ubuntu --tag 2606 --build-arg PARALLEL_JOBS=8
+
+# Disable retry on network errors
+bash docker_build.sh --module agiros-ubuntu --no-retry
 ```
 
 #### Manual Docker Buildx
@@ -364,7 +371,7 @@ echo $GO2_NETWORK_INTERFACE
 
 2. **Build the image**:
    ```bash
-   bash docker_build.sh --build agiros-ubuntu --platform linux/amd64
+   bash docker_build.sh --module agiros-ubuntu --platform linux/amd64
    ```
 
 3. **Run the container**:
@@ -380,13 +387,13 @@ echo $GO2_NETWORK_INTERFACE
 
 ### Adding New Dockerfiles
 
-1. Create Dockerfile in appropriate subdirectory
+1. Create Dockerfile in appropriate subdirectory (`agiros/` or `app/`)
 2. Add entry to `docker_build.sh` in three places:
-   - `DOCKERFILES` associative array
-   - `IMAGE_NAMES` associative array  
-   - `REGISTRY_IMAGES` associative array
+   - `MODULES` associative array (module name → Dockerfile path)
+   - `MODULE_STAGES` associative array (module name → comma-separated stages)
+   - `MODULE_DEFAULT_STAGE` associative array (module name → default stage)
 3. Add corresponding entry to `.github/workflows/docker-build.yml`
-4. Update this AGENTS.md with new image details
+4. Update this AGENTS.md with new module details
 
 ---
 
@@ -521,4 +528,4 @@ crpi-6q1jqce6oh00ahfb.cn-beijing.personal.cr.aliyuncs.com/jhaiq/
 
 ---
 
-*Last updated: 2026-02-04*
+*Last updated: 2026-06-03*

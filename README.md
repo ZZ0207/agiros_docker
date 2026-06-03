@@ -175,20 +175,41 @@ Build the Docker image from the Dockerfile:
 # The build script automatically initializes git submodules
 bash docker_build.sh
 
-# Or with options:
-bash docker_build.sh --push                    # Build and push to registry
-bash docker_build.sh --no-retry                # Disable retry on network errors
-bash docker_build.sh --platform linux/amd64   # Build for single platform
-bash docker_build.sh --help                    # Show all options
+# Build all modules (default: agiros-ubuntu, agiros-openeuler, app-ubuntu, app-openeuler)
+# Each module builds its default stage: desktop-full for agiros, unitree for app
+
+# List available modules and stages
+bash docker_build.sh --list
+
+# Build a specific module
+bash docker_build.sh --module agiros-ubuntu
+
+# Build a specific module + stage
+bash docker_build.sh --module app-ubuntu --stage unitree
+
+# Build a single stage (e.g. base) across all modules
+bash docker_build.sh --stage base
+
+# Push to registry
+bash docker_build.sh --module agiros-ubuntu --push
+
+# Single-platform local build (faster, uses --load)
+bash docker_build.sh --module app-ubuntu --platform linux/amd64
+
+# Custom tag and build args
+bash docker_build.sh --module app-ubuntu --tag 2606 --build-arg PARALLEL_JOBS=8
 ```
 
-**Script Features**:
+**Build Script Features**:
 
+- ✅ **Multi-module support**: Unified entry for `agiros/` (base images) and `app/` (application images)
+- ✅ **Stage targeting**: Build specific multi-stage targets (base, dev, desktop, desktop-full, unitree, ur5)
 - ✅ **Automatic submodule initialization**: Automatically runs `git submodule update --init --recursive`
 - ✅ **Retry mechanism**: Automatically retries on network errors (3 attempts with exponential backoff)
 - ✅ **Buildx management**: Automatically sets up and manages Docker Buildx builder
 - ✅ **Multi-arch support**: Builds for both amd64 and arm64 by default
 - ✅ **Push support**: Use `--push` flag to push to registry after build
+- ✅ **Build args**: Pass custom build args with `--build-arg KEY=VALUE`
 
 **Note**: This repository uses git submodules for `unitree_sdk2` and `unitree_ros2`.
 
@@ -226,11 +247,12 @@ This repository includes CI/CD pipeline configurations for automatic Docker imag
 
 #### GitHub Actions
 
-- **Location**: `.github/workflows/docker-build.yml` (full version with metadata) or `.github/workflows/docker-build-simple.yml` (simplified version)
+- **Location**: `.github/workflows/docker-build.yml`
 - **Triggers**: Push to `master`, `main`, `dev` branches, tags starting with `v*`, or pull requests
 - **Images Built**:
   - AGIROS openEuler image (multi-arch: amd64/arm64)
-  - ROS2 Humble openEuler image (multi-arch: amd64/arm64)
+  - AGIROS Ubuntu image (multi-arch: amd64/arm64)
+  - App images (unitree, ur5) for both Ubuntu and openEuler
 
 **Setup Instructions**:
 
@@ -253,7 +275,7 @@ This repository includes CI/CD pipeline configurations for automatic Docker imag
 - **Triggers**: Push to `master`, `main`, `dev` branches or tags starting with `v*`
 - **Images Built**:
   - AGIROS openEuler image (multi-arch: amd64/arm64)
-  - ROS2 Humble openEuler image (multi-arch: amd64/arm64)
+  - AGIROS Ubuntu image (multi-arch: amd64/arm64)
 
 **Setup Instructions**:
 
