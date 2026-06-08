@@ -282,7 +282,7 @@ COPY --chown=${USERNAME}:${USERNAME} src/ur5 ${WORKSPACE}/src
 RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     set -exo pipefail; \
     cd ${WORKSPACE}/src/yolo_ros/ && \
-    pip3 install --no-cache-dir -r requirements.txt
+    pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=1000 -r requirements.txt
 
 # 构建（不使用 cache mount 以确保构建产物固化到镜像中；不使用 --symlink-install 避免运行时symlink断裂）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

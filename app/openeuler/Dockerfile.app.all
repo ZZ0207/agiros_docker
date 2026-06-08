@@ -165,18 +165,24 @@ USER ${USERNAME}
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 # 复制应用源码（使用 --chown 确保权限正确）
-COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/src
+COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/src
 
 # 构建 cyclonedds_ws（不使用 cache mount 以确保构建产物固化到镜像中）
-RUN cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws \
+RUN set -exo pipefail; \
+    cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws \
+    && mkdir -p log build install \
+    && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
-
-# 构建 dog-bot 源码（不使用 cache mount 和 --symlink-install，避免运行时 symlink 断裂）
-RUN cd ${WORKSPACE} \
+# 构建 dog-bot（不使用 cache mount 和 --symlink-install，避免运行时 symlink 断裂）
+RUN set -exo pipefail; \
+    cd ${WORKSPACE} \
+    && mkdir -p log build install \
+    && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
+    && unset PYTHONDONTWRITEBYTECODE \
     && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
