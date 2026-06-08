@@ -1,0 +1,41 @@
+# Git
+.git/
+.gitignore
+.gitmodules
+.gitattributes
+
+# Documentation
+*.md
+docs/
+LICENSE
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build scripts & CI
+docker_build.sh
+.github/
+.gitlab-ci.yml
+
+# Compose files (not needed in build context)
+docker-compose*.yml
+docker-compose*.yaml
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+tmp/
+/tmp/

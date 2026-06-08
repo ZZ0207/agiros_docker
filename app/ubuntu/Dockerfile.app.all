@@ -4,6 +4,7 @@
 #    --target unitree \   # ← 必须指定，否则默认最后一个阶段
 #
 #  docker buildx build  \
+#     --no-cache \
 #     --platform linux/amd64,linux/arm64  \
 #     --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"  \
 #     --build-arg GIT_COMMIT="$(git rev-parse --short HEAD)"  \
@@ -71,7 +72,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     nano  \
     net-tools  \
     iputils-ping;   \
-    qemu-ldconfig-fix disable
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 USER ${USERNAME}
 
@@ -119,6 +121,7 @@ LABEL org.opencontainers.image.base.name="docker.agiros.org.cn/agiros/${ROS_PREF
 
 
 ENV ROS_DISTRO=${ROS_DISTRO}
+ENV ROS_PREFIX=${ROS_PREFIX}
 ENV WORKSPACE=${WORKSPACE}
 ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
@@ -131,14 +134,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libyaml-cpp-dev   \
     libpcap-dev   \
     libpcl-dev   \
-    && pip3 install --no-cache-dir    \
+    && pip3 install --no-cache-dir  \
     numpy    \
     scipy    \
     opencv-python      \
     transforms3d      \
     pyserial       \
     stable-baselines3; \
-    qemu-ldconfig-fix disable
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # 时区设置
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
@@ -159,8 +163,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ${ROS_PREFIX}-${ROS_DISTRO}-gazebo-ros-pkgs  \
     ${ROS_PREFIX}-${ROS_DISTRO}-plotjuggler   \
     ${ROS_PREFIX}-${ROS_DISTRO}-cartographer  \
-    ${ROS_PREFIX}-${ROS_DISTRO}-xacro;   \
-    qemu-ldconfig-fix disable
+    ${ROS_PREFIX}-${ROS_DISTRO}-pointcloud-to-laserscan \
+    ${ROS_PREFIX}-${ROS_DISTRO}-xacro; \
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # 创建工作空间并设置权限
 RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
@@ -173,10 +179,8 @@ RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAM
 # 复制应用源码（使用 --chown 确保权限正确）
 COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/src
 
-# cyclonedds 构建（带编译缓存）
-RUN --mount=type=cache,target=${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/build,uid=1000,gid=1000 \
-    --mount=type=cache,target=${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install,uid=1000,gid=1000 \
-    set -exo pipefail; \
+# cyclonedds 构建（不使用 cache mount 以确保构建产物固化到镜像中）
+RUN set -exo pipefail; \
     cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws \
     && mkdir -p log build install \
     && chown -R ${USERNAME}:${USERNAME} . \
@@ -184,34 +188,34 @@ RUN --mount=type=cache,target=${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/build,
     && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
-# dog-bot 构建（带编译缓存）
-RUN --mount=type=cache,target=${WORKSPACE}/build,uid=1000,gid=1000 \
-    --mount=type=cache,target=${WORKSPACE}/install,uid=1000,gid=1000 \
-    set -exo pipefail; \
+# dog-bot 构建（不使用 --symlink-install，避免运行时 symlink 断裂）
+RUN set -exo pipefail; \
     cd ${WORKSPACE} \
     && mkdir -p log build install \
     && chown -R ${USERNAME}:${USERNAME} . \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && unset PYTHONDONTWRITEBYTECODE \
-    && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} \
+    && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
 # Entrypoint 脚本（使用 RUN cat > 确保变量正确展开）
 USER root
-RUN cat > /ros_entrypoint.sh <<EOF
+RUN cat > /ros_entrypoint.sh <<'ROS_EOF'
 #!/bin/bash
 set -e
 source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
 [ -f "${WORKSPACE}/install/setup.bash" ] && source ${WORKSPACE}/install/setup.bash
-source ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+[ -f "${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash" ] && source ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="<CycloneDDS><Domain><General><Interfaces><NetworkInterface name=\"${NETWORK_INTERFACE_NAME}\" priority=\"default\" multicast=\"default\" /></Interfaces></General></Domain></CycloneDDS>"
-exec "\$@"
-EOF
+exec "$@"
+ROS_EOF
 RUN chmod +x /ros_entrypoint.sh
 
 USER ${USERNAME}
 WORKDIR ${WORKSPACE}
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD pgrep -f "agiros" || exit 1
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 
@@ -244,8 +248,8 @@ LABEL org.opencontainers.image.licenses="Proprietary"
 LABEL org.opencontainers.image.base.name="docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-${OS}-desktop:${IMAGE_TAG}"
 
 
-
 ENV ROS_DISTRO=${ROS_DISTRO}
+ENV ROS_PREFIX=${ROS_PREFIX}
 ENV WORKSPACE=${WORKSPACE}
 
 USER root
@@ -254,24 +258,23 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
     apt-get update && apt-get install -y --no-install-recommends \
-        lsb-release wget gnupg python3-pip && \
+        lsb-release wget gnupg python3-pip libfcl-dev && \
     wget -q https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
     qemu-ldconfig-fix disable
 
 RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
 
-USER ${USERNAME}
 WORKDIR ${WORKSPACE}
 
 # .bashrc 配置（修正引号）
-RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
-    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc && \
-    echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc && \
-    echo "export GAZEBO_MODEL_PATH=\$GAZEBO_MODEL_PATH:${WORKSPACE}/src" >> ~/.bashrc && \
-    echo "export IGN_GAZEBO_RESOURCE_PATH=\$IGN_GAZEBO_RESOURCE_PATH:${WORKSPACE}/src" >> ~/.bashrc && \
-    echo "export IGN_GAZEBO_RESOURCE_PATH=${WORKSPACE}/src/ur_robotiq_sim_gz/models:\$IGN_GAZEBO_RESOURCE_PATH" >> ~/.bashrc && \
-    echo "cd ${WORKSPACE}" >> ~/.bashrc
+RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc && \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc && \
+    echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc && \
+    echo "export GAZEBO_MODEL_PATH=\$GAZEBO_MODEL_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
+    echo "export IGN_GAZEBO_RESOURCE_PATH=\$IGN_GAZEBO_RESOURCE_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
+    echo "export IGN_GAZEBO_RESOURCE_PATH=${WORKSPACE}/src/ur_robotiq_sim_gz/models:\$IGN_GAZEBO_RESOURCE_PATH" >> /home/${USERNAME}/.bashrc && \
+    echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 COPY --chown=${USERNAME}:${USERNAME} src/ur5 ${WORKSPACE}/src
 
@@ -281,18 +284,22 @@ RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     cd ${WORKSPACE}/src/yolo_ros/ && \
     pip3 install --no-cache-dir -r requirements.txt
 
-# 构建
-RUN --mount=type=cache,target=${WORKSPACE}/build,uid=1000,gid=1000 \
-    --mount=type=cache,target=${WORKSPACE}/install,uid=1000,gid=1000 \
+# 构建（不使用 cache mount 以确保构建产物固化到镜像中；不使用 --symlink-install 避免运行时symlink断裂）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
     cd ${WORKSPACE} && \
+    apt-get update && \
     mkdir -p log build install && \
     source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash && \
     agirosdep update && \
     agirosdep install --from-paths src --ignore-src -r -y && \
     unset PYTHONDONTWRITEBYTECODE && \
-    colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} && \
-    source install/setup.bash
+    colcon build --parallel-workers ${PARALLEL_JOBS} && \
+    source install/setup.bash; \
+    qemu-ldconfig-fix disable; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 USER root
 RUN cat > /ros_entrypoint.sh <<'EOF'
@@ -305,6 +312,8 @@ EOF
 RUN chmod +x /ros_entrypoint.sh
 
 USER ${USERNAME}
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD pgrep -f "agiros" || exit 1
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 

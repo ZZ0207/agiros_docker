@@ -51,7 +51,8 @@ ENV WORKSPACE=${WORKSPACE}
 ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
 # openEuler 基础工具 + AGIROS 开发工具
-RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y update && dnf -y --setopt=install_weak_deps=False install \
     vim \
     nano \
     net-tools \
@@ -112,11 +113,14 @@ LABEL org.opencontainers.image.base.digest=""
 
 
 ENV ROS_DISTRO=${ROS_DISTRO}
+ENV ROS_PREFIX=${ROS_PREFIX}
 ENV WORKSPACE=${WORKSPACE}
 ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
 # openEuler 开发依赖（注意 -devel 后缀）
-RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
+    dnf -y update && dnf -y --setopt=install_weak_deps=False install \
     libyaml-cpp-devel \
     libpcap-devel \
     pcl-devel \
@@ -135,7 +139,8 @@ RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 # AGIROS 包
-RUN dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y update && dnf -y --setopt=install_weak_deps=False install \
     ${ROS_PREFIX}-${ROS_DISTRO}-cyclonedds \
     ${ROS_PREFIX}-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     ${ROS_PREFIX}-${ROS_DISTRO}-navigation2 \
@@ -162,37 +167,37 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc
 # 复制应用源码（使用 --chown 确保权限正确）
 COPY --chown=${USERNAME}:${USERNAME} app_ws/unitree ${WORKSPACE}/src
 
-# 构建 cyclonedds_ws
-RUN cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash    && colcon build --parallel-workers ${PARALLEL_JOBS}    && source install/setup.bash
-
+# 构建 cyclonedds_ws（不使用 cache mount 以确保构建产物固化到镜像中）
 RUN cd ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
     && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
 
-# 构建 dog-bot 源码
+# 构建 dog-bot 源码（不使用 cache mount 和 --symlink-install，避免运行时 symlink 断裂）
 RUN cd ${WORKSPACE} \
     && source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash \
-    && colcon build --symlink-install --parallel-workers ${PARALLEL_JOBS} \
+    && colcon build --parallel-workers ${PARALLEL_JOBS} \
     && source install/setup.bash
 
 
 # Entrypoint 脚本（使用 RUN cat > 确保变量正确展开）
 USER root
-RUN cat > /ros_entrypoint.sh <<EOF
+RUN cat > /ros_entrypoint.sh <<'ROS_EOF'
 #!/bin/bash
 set -e
 source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
 [ -f "${WORKSPACE}/install/setup.bash" ] && source ${WORKSPACE}/install/setup.bash
-source ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash
+[ -f "${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash" ] && source ${WORKSPACE}/src/unitree_ros2/cyclonedds_ws/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="<CycloneDDS><Domain><General><Interfaces><NetworkInterface name=\"${NETWORK_INTERFACE_NAME}\" priority=\"default\" multicast=\"default\" /></Interfaces></General></Domain></CycloneDDS>"
-exec "\$@"
-EOF
+exec "$@"
+ROS_EOF
 RUN chmod +x /ros_entrypoint.sh
 
 USER ${USERNAME}
 WORKDIR ${WORKSPACE}
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD pgrep -f "agiros" || exit 1
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
