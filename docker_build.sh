@@ -45,7 +45,7 @@ declare -A MODULE_STAGES
 MODULE_STAGES["agiros-ubuntu"]="base,dev,desktop,desktop-full"
 MODULE_STAGES["agiros-openeuler"]="base,dev,desktop,desktop-full"
 MODULE_STAGES["app-ubuntu"]="unitree,ur5"
-MODULE_STAGES["app-openeuler"]="unitree"
+MODULE_STAGES["app-openeuler"]="unitree,ur5"
 
 declare -A MODULE_DEFAULT_STAGE
 MODULE_DEFAULT_STAGE["agiros-ubuntu"]="desktop-full"
@@ -452,10 +452,6 @@ resolve_build_targets() {
 # =============================================================================
 # Main
 # =============================================================================
-
-# Clean buildx cache before starting
-info "Cleaning buildx cache..."
-docker buildx prune -f 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}============================================${NC}"

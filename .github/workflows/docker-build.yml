@@ -82,6 +82,11 @@ on:
         required: false
         default: false
         type: boolean
+      build_app_openeuler_ur5:
+        description: 'Build agiros-loong-openeuler-ur5-app'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -181,6 +186,12 @@ jobs:
             platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/app/agiros-loong-openeuler-unitree-app
             input: build_app_openeuler_unitree
+          - id: app-openeuler-ur5
+            dockerfile: app/openeuler/Dockerfile.app.all
+            target: ur5
+            platforms: linux/amd64,linux/arm64
+            image: docker.agiros.org.cn/app/agiros-loong-openeuler-ur5-app
+            input: build_app_openeuler_ur5
 
     steps:
       - name: Checkout code
@@ -206,6 +217,7 @@ jobs:
             build_app_ubuntu_unitree)                 VAL="${{ inputs.build_app_ubuntu_unitree }}" ;;
             build_app_ubuntu_ur5)                     VAL="${{ inputs.build_app_ubuntu_ur5 }}" ;;
             build_app_openeuler_unitree)              VAL="${{ inputs.build_app_openeuler_unitree }}" ;;
+            build_app_openeuler_ur5)                  VAL="${{ inputs.build_app_openeuler_ur5 }}" ;;
           esac
           echo "should_build=${VAL}" >> $GITHUB_OUTPUT
 

@@ -1,5 +1,5 @@
 ## 包含所有应用的 app docker 镜像
-## 基础镜像: docker pull docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-ubuntu-desktop:2606
+## 基础镜像: docker pull docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-openeuler-desktop:2606
 
 ##各个阶段规划
 # Stage 1: base      → 基础环境（中间层）
@@ -45,21 +45,23 @@ ARG NETWORK_INTERFACE_NAME
 ARG BUILD_DATE
 ARG GIT_COMMIT
 
-ENV DEBIAN_FRONTEND=noninteractive
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENV WORKSPACE=${WORKSPACE}
 ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
 # openEuler 基础工具 + AGIROS 开发工具
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*' && \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*'; \
     dnf -y --setopt=install_weak_deps=False install \
     vim nano net-tools \
     python3-pip  \
     python3-vcstool \
-    gcc gcc-c++ cmake make git \
-    && dnf clean all \
-    && rm -rf /tmp/* /var/tmp/*
+    gcc gcc-c++ cmake make git; \
+    dnf clean all; \
+    rm -rf /tmp/* /var/tmp/*; \
+    qemu-ldconfig-fix disable
 
 USER ${USERNAME}
 
@@ -86,6 +88,8 @@ ARG NETWORK_INTERFACE_NAME
 ARG BUILD_DATE
 ARG GIT_COMMIT
 ARG PARALLEL_JOBS
+ARG IMAGE_TAG
+ARG OS
 
 # 显式覆盖基础镜像继承的 Author 字段
 LABEL maintainer="AGIROS Team <4384213@qq.com>"
@@ -112,19 +116,23 @@ ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 # openEuler 开发依赖（注意 -devel 后缀）
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
-    dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    dnf -y update; \
+    dnf -y --setopt=install_weak_deps=False install \
     libyaml-cpp-devel \
     libpcap-devel \
     pcl-devel \
-    python3-opencv \
-    && dnf clean all \
-    && rm -rf /tmp/* /var/tmp/* \
-    && pip3 install --no-cache-dir \
+    python3-opencv; \
+    dnf clean all; \
+    rm -rf /tmp/* /var/tmp/*; \
+    pip3 install --no-cache-dir \
         numpy \
         scipy \
         transforms3d \
         pyserial \
-        stable-baselines3
+        stable-baselines3; \
+    qemu-ldconfig-fix disable
 
 
 # 时区设置
@@ -132,7 +140,10 @@ RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 
 # AGIROS 包
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y update && dnf -y --setopt=install_weak_deps=False install \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    dnf -y update; \
+    dnf -y --setopt=install_weak_deps=False install \
     ${ROS_PREFIX}-${ROS_DISTRO}-cyclonedds \
     ${ROS_PREFIX}-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     ${ROS_PREFIX}-${ROS_DISTRO}-navigation2 \
@@ -143,9 +154,10 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     ${ROS_PREFIX}-${ROS_DISTRO}-gazebo-ros-pkgs \
     ${ROS_PREFIX}-${ROS_DISTRO}-plotjuggler \
     ${ROS_PREFIX}-${ROS_DISTRO}-cartographer \
-    ${ROS_PREFIX}-${ROS_DISTRO}-xacro \
-    && dnf clean all \
-    && rm -rf /tmp/* /var/tmp/*
+    ${ROS_PREFIX}-${ROS_DISTRO}-xacro; \
+    dnf clean all; \
+    rm -rf /tmp/* /var/tmp/*; \
+    qemu-ldconfig-fix disable
 
 
 # 创建工作空间并设置权限
@@ -154,7 +166,7 @@ RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
 USER ${USERNAME}
 
 # 配置用户环境（.bashrc）
-RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
+RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc     && echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc     && echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
 
 # 复制应用源码（使用 --chown 确保权限正确）
 COPY --chown=${USERNAME}:${USERNAME} src/unitree ${WORKSPACE}/src
@@ -199,3 +211,123 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD pgrep -f "agiros" || exit 1
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
+
+
+
+# =============================================================================
+# Stage 3: ur5 app 
+# =============================================================================
+
+FROM base AS ur5
+SHELL ["/bin/bash", "-exo", "pipefail", "-c"]
+
+ARG TARGETARCH TARGETPLATFORM
+ARG ROS_DISTRO ROS_PREFIX USERNAME
+ARG WORKSPACE=/workspace/app/ur5
+ARG NETWORK_INTERFACE_NAME BUILD_DATE GIT_COMMIT PARALLEL_JOBS IMAGE_TAG OS
+
+
+# 显式覆盖基础镜像继承的 Author 字段
+LABEL maintainer="AGIROS Team <4384213@qq.com>"
+# ========== 最终镜像 LABEL（仅在此处定义） ==========
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.authors="AGIROS Team <4384213@qq.com>"
+LABEL org.opencontainers.image.vendor="AGIROS"
+LABEL org.opencontainers.image.title="AGIROS UR5 Application"
+LABEL org.opencontainers.image.description="Multi-architecture AGIROS ${ROS_DISTRO} application image with UR5 robot support. Includes AGIROS Moveit, yolo-ros ."
+LABEL org.opencontainers.image.version="${IMAGE_TAG}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/agiros/agiros-docker"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL org.opencontainers.image.base.name="docker.agiros.org.cn/agiros/${ROS_PREFIX}-${ROS_DISTRO}-${OS}-desktop:${IMAGE_TAG}"
+
+
+ENV ROS_DISTRO=${ROS_DISTRO}
+ENV ROS_PREFIX=${ROS_PREFIX}
+ENV WORKSPACE=${WORKSPACE}
+
+USER root
+
+# openEuler 开发依赖
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    dnf -y update; \
+    dnf -y --setopt=install_weak_deps=False install \
+        python3-pip \
+        wget \
+        gnupg2 \
+        libfcl-devel; \
+    dnf clean all; \
+    rm -rf /tmp/* /var/tmp/*; \
+    qemu-ldconfig-fix disable
+
+RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
+
+WORKDIR ${WORKSPACE}
+
+# .bashrc 配置
+RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc && \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc && \
+    echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc && \
+    echo "export GAZEBO_MODEL_PATH=\$GAZEBO_MODEL_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
+    echo "export IGN_GAZEBO_RESOURCE_PATH=\$IGN_GAZEBO_RESOURCE_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
+    echo "export IGN_GAZEBO_RESOURCE_PATH=${WORKSPACE}/src/ur_robotiq_sim_gz/models:\$IGN_GAZEBO_RESOURCE_PATH" >> /home/${USERNAME}/.bashrc && \
+    echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
+
+COPY --chown=${USERNAME}:${USERNAME} src/ur5 ${WORKSPACE}/src
+
+# yolo_ros 依赖
+RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
+    set -exo pipefail; \
+    cd ${WORKSPACE}/src/yolo_ros/ && \
+    pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=1000 -r requirements.txt
+
+# 构建（不使用 --symlink-install 避免运行时symlink断裂）
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    set -exo pipefail; \
+    qemu-ldconfig-fix enable; \
+    cd ${WORKSPACE}; \
+    mkdir -p log build install; \
+    source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
+    agirosdep update; \
+    agirosdep install --from-paths src --ignore-src -r -y; \
+    unset PYTHONDONTWRITEBYTECODE; \
+    colcon build --parallel-workers ${PARALLEL_JOBS}; \
+    source install/setup.bash; \
+    qemu-ldconfig-fix disable; \
+    rm -rf /tmp/* /var/tmp/*
+
+USER root
+RUN cat > /ros_entrypoint.sh <<'EOF'
+#!/bin/bash
+set -e
+source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
+[ -f "${WORKSPACE}/install/setup.bash" ] && source ${WORKSPACE}/install/setup.bash
+exec "$@"
+EOF
+RUN chmod +x /ros_entrypoint.sh
+
+USER ${USERNAME}
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD pgrep -f "agiros" || exit 1
+ENTRYPOINT ["/ros_entrypoint.sh"]
+CMD ["bash"]
+
+# =============================================================================
+# Stage 4: wheeltec app 
+# =============================================================================
+
+
+
+
+
+
+
+# =============================================================================
+# Stage 5: uav app 
+# =============================================================================
+
+
+
