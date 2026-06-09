@@ -118,7 +118,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
-    dnf -y update; \
+    dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*'; \
     dnf -y --setopt=install_weak_deps=False install \
     libyaml-cpp-devel \
     libpcap-devel \
@@ -142,7 +142,7 @@ RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
-    dnf -y update; \
+    dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*'; \
     dnf -y --setopt=install_weak_deps=False install \
     ${ROS_PREFIX}-${ROS_DISTRO}-cyclonedds \
     ${ROS_PREFIX}-${ROS_DISTRO}-rmw-cyclonedds-cpp \
@@ -253,7 +253,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
-    dnf -y update; \
+    dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*'; \
     dnf -y --setopt=install_weak_deps=False install \
         python3-pip \
         wget \
