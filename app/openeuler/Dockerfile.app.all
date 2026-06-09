@@ -52,24 +52,16 @@ ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
 # openEuler 基础工具 + AGIROS 开发工具
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y update && dnf -y --setopt=install_weak_deps=False install \
-    vim \
-    nano \
-    net-tools \
-    iputils-ping \
-    python3-pip \
-    python3-colcon-common-extensions \
-    python3-rosdep \
+    dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*' && \
+    dnf -y --setopt=install_weak_deps=False install \
+    vim nano net-tools \
+    python3-pip  \
     python3-vcstool \
-    gcc \
-    gcc-c++ \
-    cmake \
-    make \
-    git \
+    gcc gcc-c++ cmake make git \
     && dnf clean all \
     && rm -rf /tmp/* /var/tmp/*
-USER ${USERNAME}
 
+USER ${USERNAME}
 
 # =============================================================================
 # Stage 2: unitree app (完整应用环境)

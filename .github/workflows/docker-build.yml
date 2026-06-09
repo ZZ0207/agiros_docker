@@ -1,70 +1,86 @@
-name: Build and Push Docker Images to Harbor
+name: Build and Push Docker Images
 
 on:
-# 自动构建已关闭，稳定后再开启
-#  push:
-#    branches:
-#      - master
-#      - main
-#      - dev
-#    tags:
-#      - 'v*'
-#    paths:
-#      - 'agiros/**'
-#      - 'ros2/**'
-#      - '.github/workflows/docker-build.yml'
-#      - 'src/**'
-#  pull_request:
-#    branches:
-#      - master
-#      - main
-#      - 2606
-#    paths:
-#      - 'agiros/**'
-#      - 'ros2/**'
-#      - '.github/workflows/docker-build.yml'
-#      - 'src/**'
+  push:
+    branches:
+      - master
+      - main
+      - dev
+      - 'v*'
+    paths:
+      - 'agiros/**'
+      - 'app/**'
+      - 'src/**'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    branches:
+      - master
+      - main
+      - 2606
+    paths:
+      - 'agiros/**'
+      - 'app/**'
+      - 'src/**'
+      - '.github/workflows/docker-build.yml'
   workflow_dispatch:
     inputs:
-      build_agiros_loong_ubuntu_base:
-        description: 'Build agiros-loong-ubuntu-base (multistage)'
-        required: false
-        default: true
-        type: boolean
-      build_agiros_loong_ubuntu_dev:
-        description: 'Build agiros-loong-ubuntu-dev (multistage)'
-        required: false
-        default: true
-        type: boolean
-      build_agiros_loong_ubuntu_desktop:
-        description: 'Build agiros-loong-ubuntu-desktop (multistage)'
-        required: false
-        default: true
-        type: boolean
-      build_agiros_loong_ubuntu_desktop_full:
-        description: 'Build agiros-loong-ubuntu-desktop-full (multistage)'
-        required: false
-        default: true
-        type: boolean
+      # ======== AGIROS Base Images (openEuler) ========
       build_agiros_loong_openeuler_base:
-        description: 'Build agiros-loong-openeuler-base (multistage)'
+        description: 'Build agiros-loong-openeuler-base'
         required: false
         default: true
         type: boolean
       build_agiros_loong_openeuler_dev:
-        description: 'Build agiros-loong-openeuler-dev (multistage)'
+        description: 'Build agiros-loong-openeuler-dev'
         required: false
         default: true
         type: boolean
       build_agiros_loong_openeuler_desktop:
-        description: 'Build agiros-loong-openeuler-desktop (multistage)'
+        description: 'Build agiros-loong-openeuler-desktop'
         required: false
         default: true
         type: boolean
       build_agiros_loong_openeuler_desktop_full:
-        description: 'Build agiros-loong-openeuler-desktop-full (multistage)'
+        description: 'Build agiros-loong-openeuler-desktop-full'
         required: false
         default: true
+        type: boolean
+      # ======== AGIROS Base Images (Ubuntu) ========
+      build_agiros_loong_ubuntu_base:
+        description: 'Build agiros-loong-ubuntu-base'
+        required: false
+        default: true
+        type: boolean
+      build_agiros_loong_ubuntu_dev:
+        description: 'Build agiros-loong-ubuntu-dev'
+        required: false
+        default: true
+        type: boolean
+      build_agiros_loong_ubuntu_desktop:
+        description: 'Build agiros-loong-ubuntu-desktop'
+        required: false
+        default: true
+        type: boolean
+      build_agiros_loong_ubuntu_desktop_full:
+        description: 'Build agiros-loong-ubuntu-desktop-full'
+        required: false
+        default: true
+        type: boolean
+      # ======== App Images ========
+      build_app_ubuntu_unitree:
+        description: 'Build agiros-loong-ubuntu-unitree-app'
+        required: false
+        default: false
+        type: boolean
+      build_app_ubuntu_ur5:
+        description: 'Build agiros-loong-ubuntu-ur5-app'
+        required: false
+        default: false
+        type: boolean
+      build_app_openeuler_unitree:
+        description: 'Build agiros-loong-openeuler-unitree-app'
+        required: false
+        default: false
         type: boolean
 
 permissions:
@@ -80,12 +96,13 @@ jobs:
     name: ${{ matrix.id }}
     runs-on: ubuntu-latest
     timeout-minutes: 480
-    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ======== Loong multistage openEuler (amd64 + arm64 + riscv64) ========
+          # ==================================================================
+          # AGIROS Base Images — openEuler (amd64 + arm64)
+          # ==================================================================
           - id: agiros-loong-openeuler-base
             dockerfile: agiros/openeuler/loong/Dockerfile.agiros-multistage
             target: base
@@ -110,7 +127,10 @@ jobs:
             platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-openeuler-desktop-full
             input: build_agiros_loong_openeuler_desktop_full
-          # ============ Loong multistage Ubuntu (amd64 + arm64) ============
+
+          # ==================================================================
+          # AGIROS Base Images — Ubuntu (amd64 + arm64)
+          # ==================================================================
           - id: agiros-loong-ubuntu-base
             dockerfile: agiros/ubuntu/loong/Dockerfile.agiros-multistage
             target: base
@@ -135,49 +155,89 @@ jobs:
             platforms: linux/amd64,linux/arm64
             image: docker.agiros.org.cn/agiros/agiros-loong-ubuntu-desktop-full
             input: build_agiros_loong_ubuntu_desktop_full
+
+          # ==================================================================
+          # App Images — Ubuntu (amd64 + arm64)
+          # ==================================================================
+          - id: app-ubuntu-unitree
+            dockerfile: app/ubuntu/Dockerfile.app.all
+            target: unitree
+            platforms: linux/amd64,linux/arm64
+            image: docker.agiros.org.cn/app/agiros-loong-ubuntu-unitree-app
+            input: build_app_ubuntu_unitree
+          - id: app-ubuntu-ur5
+            dockerfile: app/ubuntu/Dockerfile.app.all
+            target: ur5
+            platforms: linux/amd64,linux/arm64
+            image: docker.agiros.org.cn/app/agiros-loong-ubuntu-ur5-app
+            input: build_app_ubuntu_ur5
+
+          # ==================================================================
+          # App Images — openEuler (amd64 + arm64)
+          # ==================================================================
+          - id: app-openeuler-unitree
+            dockerfile: app/openeuler/Dockerfile.app.all
+            target: unitree
+            platforms: linux/amd64,linux/arm64
+            image: docker.agiros.org.cn/app/agiros-loong-openeuler-unitree-app
+            input: build_app_openeuler_unitree
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # ── workflow_dispatch: skip if the corresponding input toggle is off ──
       - name: Check workflow_dispatch input
         id: check_dispatch
+        shell: bash
         run: |
+          VAL="true"
           case "${{ matrix.input }}" in
-            build_agiros_loong_ubuntu_base)        val="${{ inputs.build_agiros_loong_ubuntu_base }}" ;;
-            build_agiros_loong_ubuntu_dev)         val="${{ inputs.build_agiros_loong_ubuntu_dev }}" ;;
-            build_agiros_loong_ubuntu_desktop)     val="${{ inputs.build_agiros_loong_ubuntu_desktop }}" ;;
-            build_agiros_loong_ubuntu_desktop_full) val="${{ inputs.build_agiros_loong_ubuntu_desktop_full }}" ;;
-            build_agiros_loong_openeuler_base)        val="${{ inputs.build_agiros_loong_openeuler_base }}" ;;
-            build_agiros_loong_openeuler_dev)         val="${{ inputs.build_agiros_loong_openeuler_dev }}" ;;
-            build_agiros_loong_openeuler_desktop)     val="${{ inputs.build_agiros_loong_openeuler_desktop }}" ;;
-            build_agiros_loong_openeuler_desktop_full) val="${{ inputs.build_agiros_loong_openeuler_desktop_full }}" ;;
-            *) val="false" ;;
+            build_agiros_loong_openeuler_base)        VAL="${{ inputs.build_agiros_loong_openeuler_base }}" ;;
+            build_agiros_loong_openeuler_dev)         VAL="${{ inputs.build_agiros_loong_openeuler_dev }}" ;;
+            build_agiros_loong_openeuler_desktop)     VAL="${{ inputs.build_agiros_loong_openeuler_desktop }}" ;;
+            build_agiros_loong_openeuler_desktop_full) VAL="${{ inputs.build_agiros_loong_openeuler_desktop_full }}" ;;
+            build_agiros_loong_ubuntu_base)           VAL="${{ inputs.build_agiros_loong_ubuntu_base }}" ;;
+            build_agiros_loong_ubuntu_dev)            VAL="${{ inputs.build_agiros_loong_ubuntu_dev }}" ;;
+            build_agiros_loong_ubuntu_desktop)        VAL="${{ inputs.build_agiros_loong_ubuntu_desktop }}" ;;
+            build_agiros_loong_ubuntu_desktop_full)   VAL="${{ inputs.build_agiros_loong_ubuntu_desktop_full }}" ;;
+            build_app_ubuntu_unitree)                 VAL="${{ inputs.build_app_ubuntu_unitree }}" ;;
+            build_app_ubuntu_ur5)                     VAL="${{ inputs.build_app_ubuntu_ur5 }}" ;;
+            build_app_openeuler_unitree)              VAL="${{ inputs.build_app_openeuler_unitree }}" ;;
           esac
-          echo "should_build=$val" >> $GITHUB_OUTPUT
+          echo "should_build=${VAL}" >> $GITHUB_OUTPUT
 
-      - name: Install Harbor self-signed CA certificate (for docker CLI)
-        if: steps.check_dispatch.outputs.should_build == 'true'
+      # ── Push / PR triggers always build; fine-grained skip via paths ──
+      - name: Gate on event type
+        id: gate
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "proceed=${{ steps.check_dispatch.outputs.should_build }}" >> $GITHUB_OUTPUT
+          else
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Harbor CA certificate ──
+      - name: Install Harbor self-signed CA certificate
+        if: steps.gate.outputs.proceed == 'true'
         run: |
           REGISTRY="docker.agiros.org.cn"
           CERT_DIR="/etc/docker/certs.d/${REGISTRY}"
           sudo mkdir -p "${CERT_DIR}"
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee "${CERT_DIR}/ca.crt" > /dev/null
-
-          # 同时注入系统 CA 库，解决 docker CLI OAuth TLS 验证
           echo "${{ secrets.HARBOR_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/harbor-ca.crt > /dev/null
           sudo update-ca-certificates
-          
-          # 验证注入成功
           openssl x509 -in /usr/local/share/ca-certificates/harbor-ca.crt -noout -subject
-          
+
       - name: Set up QEMU
-        if: steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Build custom BuildKit image with Harbor CA cert
-        if: steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         run: |
           mkdir -p /tmp/buildkit-img
           echo "${{ secrets.HARBOR_CA_CERT }}" > /tmp/buildkit-img/harbor-ca.crt
@@ -190,7 +250,7 @@ jobs:
           docker build -t buildkit-harbor /tmp/buildkit-img/
 
       - name: Set up Docker Buildx
-        if: steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
@@ -199,15 +259,15 @@ jobs:
             network=host
 
       - name: Login to Harbor Registry
-        if: steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         uses: docker/login-action@v3
         with:
           registry: docker.agiros.org.cn
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Extract metadata
-        if: steps.check_dispatch.outputs.should_build == 'true'
+      - name: Extract metadata (tags + labels)
+        if: steps.gate.outputs.proceed == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -220,9 +280,11 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+          flavor: |
+            latest=false
 
       - name: Build and push image
-        if: steps.check_dispatch.outputs.should_build == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -234,4 +296,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.id }}
           cache-to: type=gha,mode=max,scope=${{ matrix.id }}
-
