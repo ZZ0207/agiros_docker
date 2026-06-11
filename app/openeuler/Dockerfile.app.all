@@ -257,7 +257,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
         python3-pip \
         wget \
         gnupg2 \
-        libfcl-devel; \
+        fcl-devel; \
     dnf clean all; \
     rm -rf /tmp/* /var/tmp/*; \
     qemu-ldconfig-fix disable
