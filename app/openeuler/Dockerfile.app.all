@@ -113,17 +113,15 @@ ENV ROS_PREFIX=${ROS_PREFIX}
 ENV WORKSPACE=${WORKSPACE}
 ENV NETWORK_INTERFACE_NAME=${NETWORK_INTERFACE_NAME}
 
-# openEuler 开发依赖（注意 -devel 后缀）
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
     dnf -y update --exclude='hdf5*' --exclude='netcdf*' --exclude='vtk*'; \
     dnf -y --setopt=install_weak_deps=False install \
-    libyaml-cpp-devel \
+    yaml-cpp-devel \
     libpcap-devel \
-    pcl-devel \
-    python3-opencv; \
+    pcl-devel; \
     dnf clean all; \
     rm -rf /tmp/* /var/tmp/*; \
     pip3 install --no-cache-dir \
@@ -131,7 +129,8 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
         scipy \
         transforms3d \
         pyserial \
-        stable-baselines3; \
+        stable-baselines3 \
+        opencv-python; \
     qemu-ldconfig-fix disable
 
 
