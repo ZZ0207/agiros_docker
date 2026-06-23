@@ -29,7 +29,7 @@ ARG ROS_PREFIX=agiros
 ARG WORKSPACE=/workspace/app
 ARG USERNAME=ros
 ARG IMAGE_TAG=2606
-ARG NETWORK_INTERFACE_NAME=wlp0s20f3
+ARG NETWORK_INTERFACE_NAME=eth0
 ARG OS=ubuntu
 ARG PARALLEL_JOBS=4
 
@@ -163,6 +163,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ${ROS_PREFIX}-${ROS_DISTRO}-gazebo-ros-pkgs  \
     ${ROS_PREFIX}-${ROS_DISTRO}-plotjuggler   \
     ${ROS_PREFIX}-${ROS_DISTRO}-cartographer  \
+    ${ROS_PREFIX}-${ROS_DISTRO}-cartographer-ros-msgs \
+    ${ROS_PREFIX}-${ROS_DISTRO}-cartographer-ros \
     ${ROS_PREFIX}-${ROS_DISTRO}-pointcloud-to-laserscan \
     ${ROS_PREFIX}-${ROS_DISTRO}-xacro; \
     qemu-ldconfig-fix disable; \
@@ -270,6 +272,7 @@ WORKDIR ${WORKSPACE}
 # .bashrc 配置（修正引号）
 RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc && \
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc && \
+    echo "source ${WORKSPACE}/install/setup.bash" >> /home/${USERNAME}/.bashrc && \
     echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc && \
     echo "export GAZEBO_MODEL_PATH=\$GAZEBO_MODEL_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
     echo "export IGN_GAZEBO_RESOURCE_PATH=\$IGN_GAZEBO_RESOURCE_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
