@@ -237,19 +237,38 @@ setup_buildx() {
     if [ "$PUSH" = true ]; then
         # For multi-arch push, use docker-container driver with network=host
         local builder_name="agiros-multiarch"
+
+        # Check if builder exists and remove it to ensure fresh config
         if docker buildx ls 2>/dev/null | grep -q "${builder_name}"; then
-            docker buildx use "${builder_name}" 2>/dev/null || true
-        else
-            log "Creating buildx builder '${builder_name}' (docker-container, network=host)"
-            docker buildx create \
-                --name "${builder_name}" \
-                --driver docker-container \
-                --driver-opt network=host \
-                --use || {
-                err "Failed to create buildx builder"
-                exit 1
-            }
+            log "Removing existing buildx builder '${builder_name}' to refresh config..."
+            docker buildx rm "${builder_name}" >/dev/null 2>&1 || true
         fi
+
+        # Create buildkit config for insecure registry if needed
+        local buildkit_config=""
+        if [ ! -f /etc/docker/buildx.toml ]; then
+            log "Creating buildkit config for insecure registries..."
+            sudo mkdir -p /etc/docker
+            sudo tee /etc/docker/buildx.toml > /dev/null << 'EOF'
+[registry."docker.agiros.org.cn"]
+  http = true
+  insecure = true
+EOF
+        fi
+        buildkit_config="--config /etc/docker/buildx.toml"
+
+        log "Creating buildx builder '${builder_name}' (docker-container, network=host)"
+        # shellcheck disable=SC2086
+        docker buildx create \
+            --name "${builder_name}" \
+            --driver docker-container \
+            --driver-opt network=host \
+            ${buildkit_config} \
+            --use || {
+            err "Failed to create buildx builder"
+            exit 1
+        }
+
         docker buildx inspect --bootstrap "${builder_name}" >/dev/null 2>&1 || {
             err "Failed to bootstrap buildx builder"
             exit 1
@@ -303,6 +322,12 @@ build_single() {
     echo "  Platforms: $PLATFORMS"
     echo "=========================================="
 
+    # Prepare build args (handle empty BUILD_ARGS)
+    local build_args=()
+    if [ ${#BUILD_ARGS[@]} -gt 0 ]; then
+        build_args=("${BUILD_ARGS[@]}")
+    fi
+
     if [ "$PUSH" = true ]; then
         # Multi-arch push
         info "Pushing to registry..."
@@ -311,7 +336,7 @@ build_single() {
             --target "$stage" \
             --platform "$PLATFORMS" \
             "${auto_args[@]}" \
-            "${BUILD_ARGS[@]:-}" \
+            "${build_args[@]}" \
             -t "$tag" \
             --push \
             "." || return 1
@@ -330,7 +355,7 @@ build_single() {
                 --target "$stage" \
                 --platform "$first_platform" \
                 "${auto_args[@]}" \
-                "${BUILD_ARGS[@]:-}" \
+                "${build_args[@]}" \
                 -t "$tag" \
                 --load \
                 "." || return 1
@@ -340,7 +365,7 @@ build_single() {
                 --target "$stage" \
                 --platform "$PLATFORMS" \
                 "${auto_args[@]}" \
-                "${BUILD_ARGS[@]:-}" \
+                "${build_args[@]}" \
                 -t "$tag" \
                 --load \
                 "." || return 1
