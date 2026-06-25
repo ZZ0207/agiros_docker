@@ -396,6 +396,9 @@ COPY --chown=${USERNAME}:${USERNAME} src/wheeltec ${WORKSPACE}/src
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
+    cd ${WORKSPACE}/src \
+    mv mec_car-demo/* mec_car-demo/.[!.]* . 2>/dev/null \
+    rmdir mec_car-demo \
     cd ${WORKSPACE}; \
     mkdir -p log build install; \
     source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
