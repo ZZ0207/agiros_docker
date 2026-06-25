@@ -268,7 +268,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
 
 WORKDIR ${WORKSPACE}
-
+USER ${USERNAME}
 # .bashrc 配置（修正引号）
 RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc && \
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc && \
@@ -281,13 +281,13 @@ RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAM
 
 
 COPY --chown=${USERNAME}:${USERNAME} src/ur5 ${WORKSPACE}/src
-
+USER root
 # yolo_ros 依赖（修正路径）
 RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     set -exo pipefail; \
     cd ${WORKSPACE}/src/yolo_ros/ && \
     pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=1000 -r requirements.txt
-
+USER ${USERNAME}
 # 构建（不使用 cache mount 以确保构建产物固化到镜像中；不使用 --symlink-install 避免运行时symlink断裂）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
