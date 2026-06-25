@@ -26,9 +26,9 @@
 [submodule "yolo_tf_publisher"]
 	path = src/ur5/yolo_tf_publisher
 	url = https://gitee.com/agiros/yolo_tf_publisher.git
-[submodule "ur_robotiq_sim_gz"]
+[submodule "src/ur5/ur_robotiq_sim_gz"]
 	path = src/ur5/ur_robotiq_sim_gz
 	url = https://gitee.com/agiros/ur_robotiq_sim_gz.git
-[submodule "mec_car-demo"]
+[submodule "src/wheeltec/mec_car-demo"]
 	path = src/wheeltec/mec_car-demo
 	url = https://gitee.com/agiros/mec_car-demo.git
