@@ -272,12 +272,13 @@ WORKDIR ${WORKSPACE}
 # .bashrc 配置（修正引号）
 RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc && \
     echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/${USERNAME}/.bashrc && \
-    echo "source ${WORKSPACE}/install/setup.bash" >> /home/${USERNAME}/.bashrc && \
     echo "export ROS_DOMAIN_ID=0" >> /home/${USERNAME}/.bashrc && \
     echo "export GAZEBO_MODEL_PATH=\$GAZEBO_MODEL_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
     echo "export IGN_GAZEBO_RESOURCE_PATH=\$IGN_GAZEBO_RESOURCE_PATH:${WORKSPACE}/src" >> /home/${USERNAME}/.bashrc && \
     echo "export IGN_GAZEBO_RESOURCE_PATH=${WORKSPACE}/src/ur_robotiq_sim_gz/models:\$IGN_GAZEBO_RESOURCE_PATH" >> /home/${USERNAME}/.bashrc && \
-    echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc
+    echo "cd ${WORKSPACE}" >> /home/${USERNAME}/.bashrc && \
+    echo "source ${WORKSPACE}/install/setup.bash" >> /home/${USERNAME}/.bashrc
+
 
 COPY --chown=${USERNAME}:${USERNAME} src/ur5 ${WORKSPACE}/src
 
@@ -305,7 +306,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 USER root
-RUN cat > /ros_entrypoint.sh <<'EOF'
+RUN cat > /ros_entrypoint.sh <<EOF
 #!/bin/bash
 set -e
 source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash
