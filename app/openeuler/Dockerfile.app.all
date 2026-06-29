@@ -291,20 +291,21 @@ RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=1000 -r requirements.txt
 
 
-USER ${USERNAME}
 
 # 构建（不使用 --symlink-install 避免运行时symlink断裂）
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
-    cd ${WORKSPACE}; \
-    mkdir -p log build install; \
-    source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
-    agirosdep update; \
-    agirosdep install --from-paths src --ignore-src -r -y; \
-    unset PYTHONDONTWRITEBYTECODE; \
-    colcon build --parallel-workers ${PARALLEL_JOBS}; \
-    source install/setup.bash; \
+    su - ${USERNAME} -c "\
+        cd ${WORKSPACE}; \
+        mkdir -p log build install; \
+        source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
+        agirosdep update; \
+        agirosdep install --from-paths src --ignore-src -r -y; \
+        unset PYTHONDONTWRITEBYTECODE; \
+        colcon build --parallel-workers ${PARALLEL_JOBS}; \
+        source install/setup.bash; \
+    "; \
     qemu-ldconfig-fix disable; \
     rm -rf /tmp/* /var/tmp/*
 
@@ -402,26 +403,29 @@ RUN echo "source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash" >> /home/${USERNAM
 
 COPY --chown=${USERNAME}:${USERNAME} src/wheeltec ${WORKSPACE}/src
 
+USER root
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
-    cd ${WORKSPACE}/src \
-    mv mec_car-demo/* mec_car-demo/.[!.]* . 2>/dev/null \
-    rmdir mec_car-demo \
-    cd ${WORKSPACE}; \
-    mkdir -p log build install; \
-    source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
-    agirosdep update; \
-    agirosdep install --from-paths src --ignore-src -r -y; \
-    unset PYTHONDONTWRITEBYTECODE; \
-    colcon build --packages-select wheeltec_robot_msg; \
-    source install/setup.bash; \
-    colcon build --packages-select turn_on_wheeltec_robot; \
-    source install/setup.bash; \
-    colcon build --packages-select wheeltec_rrt_msg; \
-    source install/setup.bash; \
-    colcon build --parallel-workers ${PARALLEL_JOBS}; \
-    source install/setup.bash; \
+    su - ${USERNAME} -c "\
+        cd ${WORKSPACE}/src && \
+        mv mec_car-demo/* mec_car-demo/.[!.]* . 2>/dev/null && \
+        rmdir mec_car-demo; \
+        cd ${WORKSPACE}; \
+        mkdir -p log build install; \
+        source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
+        agirosdep update; \
+        agirosdep install --from-paths src --ignore-src -r -y; \
+        unset PYTHONDONTWRITEBYTECODE; \
+        colcon build --packages-select wheeltec_robot_msg; \
+        source install/setup.bash; \
+        colcon build --packages-select turn_on_wheeltec_robot; \
+        source install/setup.bash; \
+        colcon build --packages-select wheeltec_rrt_msg; \
+        source install/setup.bash; \
+        colcon build --parallel-workers ${PARALLEL_JOBS}; \
+        source install/setup.bash; \
+    "; \
     qemu-ldconfig-fix disable; \
     rm -rf /tmp/* /var/tmp/*
 
