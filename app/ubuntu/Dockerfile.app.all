@@ -255,15 +255,6 @@ ENV ROS_PREFIX=${ROS_PREFIX}
 ENV WORKSPACE=${WORKSPACE}
 
 USER root
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -exo pipefail; \
-    qemu-ldconfig-fix enable; \
-    apt-get update && apt-get install -y --no-install-recommends \
-        lsb-release wget gnupg python3-pip libfcl-dev && \
-    wget -q https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null && \
-    qemu-ldconfig-fix disable
 
 RUN mkdir -p ${WORKSPACE}/src && chown -R ${USERNAME}:${USERNAME} ${WORKSPACE}
 
@@ -287,21 +278,22 @@ RUN --mount=type=cache,target=/home/${USERNAME}/.cache/pip,uid=1000,gid=1000 \
     set -exo pipefail; \
     cd ${WORKSPACE}/src/yolo_ros/ && \
     pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=1000 -r requirements.txt
-USER ${USERNAME}
+
 # 构建（不使用 cache mount 以确保构建产物固化到镜像中；不使用 --symlink-install 避免运行时symlink断裂）
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     set -exo pipefail; \
     qemu-ldconfig-fix enable; \
-    cd ${WORKSPACE} && \
-    apt-get update && \
-    mkdir -p log build install && \
-    source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash && \
-    agirosdep update && \
-    agirosdep install --from-paths src --ignore-src -r -y && \
-    unset PYTHONDONTWRITEBYTECODE && \
-    colcon build --parallel-workers ${PARALLEL_JOBS} && \
-    source install/setup.bash; \
+    su - ${USERNAME} -c "\
+        cd ${WORKSPACE}; \
+        mkdir -p log build install; \
+        source /opt/${ROS_PREFIX}/${ROS_DISTRO}/setup.bash; \
+        agirosdep update; \
+        agirosdep install --from-paths src --ignore-src -r -y; \
+        unset PYTHONDONTWRITEBYTECODE; \
+        colcon build --parallel-workers ${PARALLEL_JOBS}; \
+        source install/setup.bash; \
+    "; \
     qemu-ldconfig-fix disable; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
