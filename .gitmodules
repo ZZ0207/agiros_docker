@@ -32,3 +32,6 @@
 [submodule "src/wheeltec/mec_car-demo"]
 	path = src/wheeltec/mec_car-demo
 	url = https://gitee.com/agiros/mec_car-demo.git
+[submodule "src/wheeltec/serial_ros2"]
+	path = src/wheeltec/serial_ros2
+	url = https://gitee.com/gao-bin123456789/serial_ros2.git
